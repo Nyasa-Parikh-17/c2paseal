@@ -1,0 +1,113 @@
+{
+  "active_manifest": "urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e",
+  "manifests": {
+    "urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e": {
+      "claim": {
+        "instanceID": "xmp:iid:cccae97f-3c62-48dd-94d7-e4f3fea298bc",
+        "claim_generator_info": {
+          "name": "c2paseal-fixtures",
+          "version": "1.0",
+          "org.contentauth.c2pa_rs": "0.90.21"
+        },
+        "signature": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.signature",
+        "created_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.hash.data",
+            "hash": "qGVU/WwT2WqL6z9aZ2c6L6IqG3yIt73faD2X3CXoYNY="
+          }
+        ],
+        "gathered_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.claim",
+            "hash": "VddwUxGeBe12+v8Pb3bfysKSTdf8o1A4uRY5ZQq6YA8="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.actions.v2",
+            "hash": "48Z6dB8E2PKnPNJH1y1HXBEn/vBkQv7ThWoFpCeUodE="
+          }
+        ],
+        "dc:title": "expired.jpg",
+        "alg": "sha256",
+        "claim_version": 2
+      },
+      "assertion_store": {
+        "c2pa.actions.v2": {
+          "actions": [
+            {
+              "action": "c2pa.created",
+              "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+            }
+          ]
+        },
+        "c2pa.thumbnail.claim": "<omitted> len = 29030",
+        "c2pa.hash.data": {
+          "exclusions": [
+            {
+              "start": 2,
+              "length": 42519
+            }
+          ],
+          "name": "jumbf manifest",
+          "alg": "sha256",
+          "hash": "S3DOnKGGh3RuZTrBUyLLoI+As7BOr72Su3Zgvmg63uQ=",
+          "pad": "AAAAAAAAAAAA"
+        }
+      },
+      "signature": {
+        "alg": "es256",
+        "issuer": "C2paSeal TEST ONLY",
+        "common_name": "C2paSeal Test Signer (short-lived)"
+      }
+    }
+  },
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "signingCredential.trusted",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.signature",
+          "explanation": "signing certificate trusted, found in System trust anchors"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.assertions/c2pa.thumbnail.claim",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.assertions/c2pa.actions.v2",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions.v2"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.expired",
+          "url": "self#jumbf=/c2pa/urn:c2pa:df8dd830-f49b-4696-9cb8-2a743628830e/c2pa.signature",
+          "explanation": "certificate expired"
+        }
+      ]
+    }
+  },
+  "validation_state": "Invalid"
+}

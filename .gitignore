@@ -1,0 +1,16 @@
+# Binaries
+/c2paseal
+/c2paseal.exe
+*.exe
+/dist/
+
+# Test and coverage output
+*.test
+*.out
+/tmp/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

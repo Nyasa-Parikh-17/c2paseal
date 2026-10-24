@@ -300,3 +300,49 @@ User approved and said they would re-check the results later.
   Rust HashMap). All our comparisons parse the JSON, so this is harmless;
   never compare oracle files as raw bytes.
 - Fuzz 30 s each, all six targets: no failures (0.6M–3.1M execs each).
+
+### Phase 8 — Signature and certificate checks (2026-10-17)
+
+**Built** (`verify`)
+- `status.go`: in-scope status codes as constants; `KindOf` copies c2pa-rs
+  `log_kind` (fixed success and informational sets, everything else
+  failure); `Status{Code, URL, Explanation}`.
+- `signature.go`: `Signature(m, signingTime, opts) []Status` in c2pa-rs
+  order — signature reference (`claimSignature.missing`), manifest label
+  (`claim.malformed`), algorithm (`algorithm.unsupported`; only ES256 in
+  scope), DER-encoded EC signature (`signingCredential.invalid`),
+  certificate profile, trust, then the signature: Sig_structure
+  `["Signature1", protected, h'', claim Raw]` verified with go-cose's ES256
+  verifier → `insideValidity` + `validated`, or `claimSignature.mismatch`.
+- `profile.go`: port of c2pa-rs `check_end_entity_certificate_profile`
+  (version, validity at time-stamp or now, signature algorithm, EC curve /
+  RSA ≥ 2048, self-signed CA, EKU rules with c2pa-rs's allowed list, key
+  usage, AKI/SKI, unhandled critical extensions, end-entity).
+- `Options{TrustAnchors, Now}`. No anchors → `signingCredential.untrusted`.
+- `deps.go` removed: all three allowed dependencies are now imported.
+
+**Results**
+- Signature and credential codes (kind, order and URL) equal the oracle
+  for **all 13 readable fixtures in both trust modes (26/26)**, incl.
+  `sig-flip.jpg` and `expired.jpg`.
+- 7 signature scenarios, 6 structural cases and 16 profile rules tested with
+  certificates generated in the test and COSE signed by go-cose.
+- Full suite, vet, staticcheck, gofmt clean; `verify` coverage 91.6%.
+
+**Cross-check against c2pa-rs (surprises)**
+- `claimSignature.insideValidity` is logged whenever the signature verifies,
+  even if the cert is expired: expiry is reported separately as
+  `signingCredential.expired` and does not stop verification.
+- Without a time-stamp, trust is checked with OpenSSL `NO_CHECK_TIME`: an
+  expired but otherwise valid chain is still `signingCredential.trusted`.
+  Go's `x509.Verify` always checks time, so we try each certificate's
+  notBefore/notAfter and accept if any verifies. Checking only at the
+  signer's notBefore failed on `expired.jpg` (its leaf predates the test
+  intermediate). Chains with no common validity instant would still differ.
+- With a time-stamp, both profile and trust use the time-stamp's time.
+- c2pa-rs rejects a DER-encoded ECDSA signature as `signingCredential.invalid`
+  (COSE requires raw r|s).
+- COSE headers in c2pa-rs output: `alg` and `x5chain` protected;
+  `sigTst2` and `pad` unprotected; payload nil — matches our decoder.
+- Not ported: issuer/subject unique-ID check (Go's x509 does not expose
+  them), OCSP, allowed end-entity lists, ES384/ES512/PS*/Ed25519 (scope).

@@ -18,6 +18,10 @@ Scope-creep ideas go here instead of being built.
 - Legacy (pre-1.3) ingredient manifest hash fallback; redacted ingredients.
 - OCSP / revocation; allowed end-entity lists; BMFF, boxes and collection
   hard bindings.
+- Signing: auto-generated thumbnails (would need image decode/resize),
+  ingredients (re-signing an already signed file as an edit of its parent),
+  c2pa.opened / placed / removed actions, CreativeWork and other assertions,
+  signature algorithms other than ES256, keys in HSMs beyond crypto.Signer.
 
 ## Log
 
@@ -421,4 +425,47 @@ User approved and said they would re-check the results later.
 - Hard-binding-missing URL is the manifest URI (not confirmed against
   c2pa-rs's `claim.uri()`; no fixture exercises it).
 
-### Gate B — awaiting decision (2026-10-24)
+### Gate B — approved (2026-10-24)
+User approved continuing to signing under the MVP scope: JPEG only, no
+time-stamps when signing, test PKI only, no UI / interop / release tooling.
+
+### Phase 10 — Manifest builder (2026-10-24)
+
+**Built** (`sign`)
+- `Options`: signer chain (leaf first, no root) + `crypto.Signer`; claim
+  generator name/version (default `C2paSeal` / `0.1.0`); actions (default one
+  `c2pa.created` with `DigitalSourceType`, default IPTC `digitalCapture`);
+  optional `Title` and `Thumbnail`; optional `Rand` for salts/UUIDs.
+  `validate` rejects non-P-256 keys, a key that does not match the leaf, and
+  action lists our verifier (and c2pa-rs) would flag: first action not
+  `c2pa.created`, created/opened later on, created without a source type,
+  placed/removed (need ingredients).
+- `Build(opts) *Manifest`: store laid out like c2pa-rs — `c2pa` / `urn:c2pa:<uuid>`
+  / {`c2pa.assertions` {actions.v2, hash.data, [thumbnail.claim]}, `c2pa.claim.v2`,
+  `c2pa.signature`} — with C2PA content-type UUIDs, assertion jumd boxes
+  carrying a 16-byte random `c2sh` salt, hashed URIs over each assertion
+  box, claim v2 (core deterministic), and a tagged COSE_Sign1 with protected
+  `{alg: -7, x5chain}`, empty unprotected header, nil payload and a
+  zero-filled 64-byte signature.
+- `c2pa.hash.data` is hand-encoded (`hashdata.go`) with **fixed-width 8-byte
+  CBOR integers** for exclusion start/length, so its size is the same for
+  every value; field offsets are recorded for backfilling. This is valid
+  CBOR but intentionally not core deterministic.
+- Backfill API used by Phase 11: `SetExclusion`, `SetDigest`, `Seal`
+  (re-hash hash.data, update its hashed URI, re-encode claim, sign).
+  Every replacement goes through `replacePayload`, which returns
+  `ErrSizeMismatch` if a new value is not exactly its placeholder's size.
+- `jpeg.WriteStore`: overwrite store bytes in an already inserted JPEG, in
+  place, across APP11 segment boundaries (closed-form offset mapping).
+
+**Results**
+- Builder → serialise → `jumbf.Parse` + `manifest.DecodeStore` round trip
+  passes for 5 option sets (defaults; title + generator; thumbnail; two
+  actions with softwareAgent; leaf-only chain): claim fields, assertion set,
+  actions, placeholder hash.data, thumbnail, x5chain and zeroed signature all
+  read back; every hashed URI matches.
+- After SetExclusion/SetDigest/Seal the store keeps its size and the claim
+  signature verifies with our verifier. Fixed-width encoding: same size for
+  0 and MaxUint64. 12 option-validation cases. Same `Rand` → same bytes.
+- `WriteStore` equals re-inserting the modified store, incl. writes that
+  straddle segments. Full suite, vet, staticcheck clean; `sign` 88.2%.

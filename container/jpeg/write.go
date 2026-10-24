@@ -121,6 +121,35 @@ func Insert(b, store []byte) ([]byte, []Segment, error) {
 	return append(out, b[at:]...), placed, nil
 }
 
+// ErrOutOfRange is returned by WriteStore for a write outside the store.
+var ErrOutOfRange = errors.New("write outside the inserted manifest store")
+
+// WriteStore overwrites bytes of a manifest store that Insert has already
+// placed in file, without moving anything: data replaces the store bytes at
+// [storeOff, storeOff+len(data)), split across APP11 segments as needed.
+// segs and hdrLen are Insert's segments and the store's box header length.
+func WriteStore(file []byte, segs []Segment, hdrLen, storeOff int, data []byte) error {
+	for len(data) > 0 {
+		z := storeOff / MaxChunk
+		if storeOff < 0 || z >= len(segs) {
+			return fmt.Errorf("jpeg: %w: store offset %d", ErrOutOfRange, storeOff)
+		}
+		start := segs[z].Offset + segOverhead
+		if z > 0 {
+			start += hdrLen // repeated box header
+		}
+		pos := start + storeOff%MaxChunk
+		n := min(len(data), segs[z].End()-pos)
+		if n <= 0 || segs[z].End() > len(file) {
+			return fmt.Errorf("jpeg: %w: store offset %d", ErrOutOfRange, storeOff)
+		}
+		copy(file[pos:], data[:n])
+		data = data[n:]
+		storeOff += n
+	}
+	return nil
+}
+
 // storeHeaderLen checks that store starts with a jumb box header and returns
 // the header's length.
 func storeHeaderLen(store []byte) (int, error) {

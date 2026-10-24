@@ -261,3 +261,37 @@ func FuzzStripInsert(f *testing.F) {
 		}
 	})
 }
+
+// TestWriteStore: overwriting store bytes in place, across segment
+// boundaries, gives the same file as inserting the modified store.
+func TestWriteStore(t *testing.T) {
+	base := jpegOf(seg(APP0, []byte("JFIF\x00")))
+	s := storeOfSize(t, 3*MaxChunk+500)
+	file, segs, err := Insert(base, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modified := bytes.Clone(s)
+	for _, w := range []struct{ off, n int }{
+		{100, 50},                  // inside segment 1
+		{MaxChunk - 10, 40},        // straddles segments 1 and 2
+		{2*MaxChunk - 5, MaxChunk}, // spans segment 3 entirely into 4
+		{len(s) - 7, 7},            // last bytes
+	} {
+		data := bytes.Repeat([]byte{byte(w.off)}, w.n)
+		copy(modified[w.off:], data)
+		if err := WriteStore(file, segs, 8, w.off, data); err != nil {
+			t.Fatalf("WriteStore(%d, %d): %v", w.off, w.n, err)
+		}
+	}
+	want, _, err := Insert(base, modified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(file, want) {
+		t.Fatal("in-place writes differ from inserting the modified store")
+	}
+	if err := WriteStore(file, segs, 8, len(s)-2, []byte{1, 2, 3}); !errors.Is(err, ErrOutOfRange) {
+		t.Errorf("write past store end: %v, want ErrOutOfRange", err)
+	}
+}

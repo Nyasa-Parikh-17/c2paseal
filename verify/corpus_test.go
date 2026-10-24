@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/fixtures"
 )
@@ -101,7 +102,7 @@ func TestCorpus(t *testing.T) {
 			n++
 			t.Run(f.String()+"/"+mode, func(t *testing.T) {
 				exp, err := f.Expected()
-				opts := &Options{}
+				opts := &Options{Now: corpusTime}
 				if mode == "trusted" {
 					exp, err = f.Trusted()
 					opts.TrustAnchors = anchors
@@ -144,6 +145,12 @@ func TestCorpus(t *testing.T) {
 		t.Errorf("only %d fixture/mode pairs", n)
 	}
 }
+
+// corpusTime pins "now" for oracle comparisons to just after the corpus was
+// generated (2026-10-17): after the short-lived expired.jpg signer lapsed,
+// long before the test PKI's 2031 expiry. Without it the comparisons would
+// start failing once the test certificates expire.
+func corpusTime() time.Time { return time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC) }
 
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")

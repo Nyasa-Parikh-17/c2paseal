@@ -104,3 +104,34 @@ func TestInspect(t *testing.T) {
 		t.Errorf("inspect unsigned: exit %d, want %d", code, exitInvalid)
 	}
 }
+
+func TestSignCommand(t *testing.T) {
+	cert, key := fixture(t, "pki/leaf-chain.pem"), fixture(t, "pki/leaf.key")
+	out := filepath.Join(t.TempDir(), "out.jpg")
+	var stdout bytes.Buffer
+	args := []string{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.jpg"), "--out", out, "--title", "CLI test"}
+	if code := run(args, &stdout, io.Discard); code != exitValid {
+		t.Fatalf("sign exit %d", code)
+	}
+	if code := run([]string{"verify", out}, io.Discard, io.Discard); code != exitValid {
+		t.Errorf("verify of CLI-signed file: exit %d", code)
+	}
+	if code := run([]string{"verify", "--trust", fixture(t, "pki/trust-anchors.pem"), out}, &stdout, io.Discard); code != exitValid || !strings.Contains(stdout.String(), "state: Trusted") {
+		t.Errorf("verify --trust: exit %d\n%s", code, stdout.String())
+	}
+
+	usage := [][]string{
+		{"sign"},
+		{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.jpg")}, // no --out
+		{"sign", "--cert", cert, "--key", cert, "--in", "a.jpg", "--out", out},           // bad key
+		{"sign", "--cert", cert, "--key", key, "--in", "a.jpg", "--out", out, "extra"},
+	}
+	for _, a := range usage {
+		if code := run(a, io.Discard, io.Discard); code != exitUsage {
+			t.Errorf("run(%q) = %d, want %d", a, code, exitUsage)
+		}
+	}
+	if code := run([]string{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.png"), "--out", out}, io.Discard, io.Discard); code != exitInvalid {
+		t.Errorf("signing a PNG: exit %d, want %d", code, exitInvalid)
+	}
+}

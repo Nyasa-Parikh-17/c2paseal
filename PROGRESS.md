@@ -469,3 +469,61 @@ time-stamps when signing, test PKI only, no UI / interop / release tooling.
   0 and MaxUint64. 12 option-validation cases. Same `Rand` → same bytes.
 - `WriteStore` equals re-inserting the modified store, incl. writes that
   straddle segments. Full suite, vet, staticcheck clean; `sign` 88.2%.
+
+### Phase 11 — Reserve-and-backfill (JPEG) (2026-10-24)
+
+**Built**
+- `sign.JPEG(in, opts)` following PHASES.md's order exactly:
+  1. `build` the manifest with zero-filled placeholders of final size
+     (32-byte digest, fixed-width 8-byte exclusion start/length, 64-byte
+     ES256 signature); 2. serialise and record the store length;
+  3. strip any old store, insert the placeholder (segment count checked
+     against the closed-form `jpeg.SegmentCount`, contiguity checked);
+  4. `SetExclusion(firstSegment.Offset, InsertedSize)` written in place;
+  5. SHA-256 of the file minus the exclusion, `SetDigest` written in place;
+  6. `Seal`: re-hash hash.data, update its hashed URI, re-encode the claim,
+     sign, write claim and signature in place;
+  7. `checkReserved(placeholder, final)` returns `ErrSizeMismatch` if the
+     final store length differs; the in-place bytes must also equal a
+     fresh serialisation of the final tree and what `jpeg.Extract` reads
+     back from the output.
+  All in-place writes go through `jpeg.WriteStore`; every replaced value is
+  size-checked in production code (`replacePayload` → `ErrSizeMismatch`).
+- Top level: `Sign(in, out, opts)` (atomic write via temp file + rename),
+  `SignBytes`, `SignOptions` (= `sign.Options`), `LoadSigner` (PEM chain +
+  PKCS#8 or SEC1 EC key), `ErrSignFormat` for non-JPEG input.
+- CLI: `c2paseal sign --cert --key --in --out [--title] [--source-type]`.
+- `scripts/mvp-evidence`: signs every unsigned JPEG fixture and saves the
+  signed file, unedited c2patool output (default + test root trusted) and
+  our `verify --json` in `testdata/mvp-evidence/`, plus a summary README.
+- Corpus/oracle tests now pin "now" to 2026-10-24 (`corpusTime`) so they do
+  not break when the test PKI expires in 2031.
+
+**Results — all four MVP "Done when" checks pass**
+1. Every unsigned JPEG fixture (exif, large, small) signed by us verifies
+   with our `Verify`: only `signingCredential.untrusted`, state Valid;
+   with the test root trusted: no failures, state Trusted. `Strip` of the
+   output gives the original bytes back.
+2. `c2patool --detailed` on each: Valid with only
+   `signingCredential.untrusted`; Trusted with no failures when the test
+   root is trusted (`TestC2patool`, and saved in `testdata/mvp-evidence/`).
+3. `TestMisSizedPlaceholder`: 63-, 65- and 0-byte signature placeholders all
+   fail with `ErrSizeMismatch` and no output; `checkReserved` tested directly.
+4. `CGO_ENABLED=0 go build ./...` and `go test ./...` pass; vet and
+   staticcheck clean. Coverage: sign 87.6%, top level 85.9%, CLI 93.1%.
+- Also: re-signing a c2patool-signed file (edited.jpg) replaces its store;
+  a 192 KB thumbnail makes a 4+ segment store whose in-place writes cross
+  segment boundaries and still verify; flipping an image byte gives
+  `assertion.dataHash.mismatch`, flipping a signature byte
+  `claimSignature.mismatch`.
+
+**Open issues / known limits**
+- CI has never run (repo not pushed). `TestC2patool` skips without c2patool,
+  so CI will not repeat the c2patool check.
+- `--source-type` defaults to IPTC `digitalCapture` ("taken by a camera");
+  that is wrong for edited or generated images — callers should set it.
+- Signing tests and CLI tests that sign now use the real clock; they will
+  start failing when `testdata/pki` expires (2031-10). Regenerate the PKI
+  and corpus before then.
+- OneDrive may turn the working tree into cloud placeholders again, which
+  breaks `go build` (see Phase 9). Moving the repo out of OneDrive avoids it.

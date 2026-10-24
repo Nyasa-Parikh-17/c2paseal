@@ -1,10 +1,12 @@
-// Command c2paseal inspects and verifies C2PA Content Credentials in JPEG
-// and PNG files.
+// Command c2paseal inspects, verifies and signs C2PA Content Credentials.
+// It reads and verifies JPEG and PNG, and signs JPEG.
 //
 //	c2paseal inspect <file>
 //	c2paseal verify [--json] [--trust anchors.pem] <file>
+//	c2paseal sign --cert chain.pem --key key.pem --in in.jpg --out out.jpg [--title t] [--source-type uri]
 //
-// Exit codes: 0 = valid (or inspected), 1 = invalid or unreadable, 2 = usage error.
+// Exit codes: 0 = success / valid, 1 = invalid, unreadable or signing failed,
+// 2 = usage error.
 package main
 
 import (
@@ -15,6 +17,7 @@ import (
 	"os"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/sign"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
@@ -32,8 +35,10 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `usage:
   c2paseal inspect <file>                              print the manifest store as JSON
   c2paseal verify [--json] [--trust anchors.pem] <file> validate the manifest store
+  c2paseal sign --cert chain.pem --key key.pem --in in.jpg --out out.jpg [--title t] [--source-type uri]
+                                                       sign a JPEG (replaces any existing manifest)
 
-exit codes: 0 valid, 1 invalid or unreadable, 2 usage error`)
+exit codes: 0 success/valid, 1 invalid, unreadable or signing failed, 2 usage error`)
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -46,6 +51,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return inspect(args[1:], stdout, stderr)
 	case "verify":
 		return verifyCmd(args[1:], stdout, stderr)
+	case "sign":
+		return signCmd(args[1:], stdout, stderr)
 	case "-h", "-help", "--help", "help":
 		usage(stdout)
 		return exitValid
@@ -125,6 +132,37 @@ func verifyCmd(args []string, stdout, stderr io.Writer) int {
 	if state == verify.Invalid {
 		return exitInvalid
 	}
+	return exitValid
+}
+
+func signCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cert := fs.String("cert", "", "PEM certificate chain: signer first, then intermediates")
+	key := fs.String("key", "", "PEM private key of the signer (ECDSA P-256)")
+	in := fs.String("in", "", "JPEG to sign")
+	out := fs.String("out", "", "where to write the signed JPEG")
+	title := fs.String("title", "", "optional dc:title for the claim")
+	source := fs.String("source-type", "", "IPTC digital source type for the c2pa.created action (default "+sign.DefaultDigitalSourceType+")")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	if fs.NArg() != 0 || *cert == "" || *key == "" || *in == "" || *out == "" {
+		fmt.Fprintln(stderr, "c2paseal sign: --cert, --key, --in and --out are required")
+		fs.Usage()
+		return exitUsage
+	}
+	chain, signer, err := c2paseal.LoadSigner(*cert, *key)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source}
+	if err := c2paseal.Sign(*in, *out, opts); err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitInvalid
+	}
+	fmt.Fprintf(stdout, "signed %s -> %s\n", *in, *out)
 	return exitValid
 }
 

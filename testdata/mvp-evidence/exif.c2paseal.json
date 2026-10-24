@@ -1,0 +1,37 @@
+{
+  "validation_results": {
+    "activeManifest": [
+      {
+        "code": "signingCredential.untrusted",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.signature",
+        "explanation": "signing certificate untrusted"
+      },
+      {
+        "code": "claimSignature.insideValidity",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.signature",
+        "explanation": "claim signature valid"
+      },
+      {
+        "code": "claimSignature.validated",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.signature",
+        "explanation": "claim signature valid"
+      },
+      {
+        "code": "assertion.hashedURI.match",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.assertions/c2pa.actions.v2",
+        "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions.v2"
+      },
+      {
+        "code": "assertion.hashedURI.match",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.assertions/c2pa.hash.data",
+        "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+      },
+      {
+        "code": "assertion.dataHash.match",
+        "url": "self#jumbf=/c2pa/urn:c2pa:194b9d4f-d213-4eb4-9a86-4db6a89fce79/c2pa.assertions/c2pa.hash.data",
+        "explanation": "data hash valid"
+      }
+    ]
+  },
+  "validation_state": "Valid"
+}

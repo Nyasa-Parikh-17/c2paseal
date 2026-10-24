@@ -111,7 +111,7 @@ func TestOracle(t *testing.T) {
 	for _, f := range all {
 		for _, mode := range []string{"default", "trusted"} {
 			exp, err := f.Expected()
-			opts := &Options{}
+			opts := &Options{Now: corpusTime}
 			if mode == "trusted" {
 				exp, err = f.Trusted()
 				opts.TrustAnchors = anchors

@@ -19,7 +19,7 @@ type Options struct {
 	// TrustAnchors are the root (or intermediate) certificates a signing
 	// chain must lead to. Without any, every signer is untrusted; a valid
 	// but untrusted chain gives signingCredential.untrusted, not a total
-	// failure.
+	// failure. Time-stamp authorities are checked against the same anchors.
 	TrustAnchors []*x509.Certificate
 
 	// Now returns the current time. Nil means time.Now.
@@ -33,38 +33,43 @@ func (o *Options) now() time.Time {
 	return o.Now()
 }
 
-// SignatureURL returns the status URL of a manifest's signature box.
-func SignatureURL(m *manifest.Manifest) string {
-	return manifest.JUMBFURIPrefix + "/c2pa/" + m.Label + "/" + manifest.LabelSignature
-}
-
 // manifestLabel matches a v2 manifest label: urn:c2pa:<uuid> with optional
 // :<claim generator> and :<version>_<reason> parts.
 var manifestLabel = regexp.MustCompile(`^urn:c2pa:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(:[^:]*(:[^:]*)?)?$`)
 
-// Signature checks a manifest's claim signature and signing credential.
-// signingTime is the time from a validated time-stamp, or nil.
-//
-// The order and content of the statuses follow c2pa-rs (claim.rs
-// verify_claim and crypto/cose/verifier.rs): signature reference, label,
-// algorithm, signature encoding, certificate profile, trust, then the
-// signature itself. Profile and trust problems do not stop the signature
-// check.
+// Signature checks a manifest's claim signature and signing credential,
+// given the time from an already validated time-stamp (or nil). It is
+// refChecks followed by credentials; Verify puts the time-stamp checks
+// between the two, as c2pa-rs does.
 func Signature(m *manifest.Manifest, signingTime *time.Time, opts *Options) []Status {
+	return append(refChecks(m), credentials(m, signingTime, opts)...)
+}
+
+// refChecks reports a signature reference that does not name this
+// manifest's signature box, and a malformed manifest label (c2pa-rs
+// claim.rs verify_claim).
+func refChecks(m *manifest.Manifest) []Status {
+	var out []Status
+	if !signatureRefOK(m) {
+		out = append(out, Status{ClaimSignatureMissing, SignatureURL(m), "signature missing"})
+	}
+	if !manifestLabel.MatchString(m.Label) {
+		out = append(out, Status{ClaimMalformed, ManifestURL(m.Label), "claim box label invalid"})
+	}
+	return out
+}
+
+// credentials checks the algorithm, signature encoding, certificate
+// profile, trust, and finally the signature itself, in c2pa-rs order
+// (crypto/cose/verifier.rs). Profile and trust problems do not stop the
+// signature check.
+func credentials(m *manifest.Manifest, signingTime *time.Time, opts *Options) []Status {
 	url := SignatureURL(m)
 	var out []Status
-	add := func(code, why string) { out = append(out, Status{Code: code, URL: url, Explanation: why}) }
+	add := func(code, why string) { out = append(out, Status{code, url, why}) }
 	mismatch := func() []Status {
 		add(ClaimSignatureMismatch, "claim signature is not valid")
 		return out
-	}
-
-	if !signatureRefOK(m) {
-		add(ClaimSignatureMissing, "signature missing")
-	}
-	if !manifestLabel.MatchString(m.Label) {
-		out = append(out, Status{Code: ClaimMalformed, URL: manifest.JUMBFURIPrefix + "/c2pa/" + m.Label,
-			Explanation: "claim box label invalid"})
 	}
 
 	s := m.Signature
@@ -84,16 +89,24 @@ func Signature(m *manifest.Manifest, signingTime *time.Time, opts *Options) []St
 		add(SigningCredentialInvalid, "certificate could not be parsed")
 		return mismatch()
 	}
+	var chain []*x509.Certificate
+	for _, der := range s.X5Chain[1:] {
+		c, err := x509.ParseCertificate(der)
+		if err != nil {
+			add(SigningCredentialInvalid, "certificate could not be parsed")
+			return mismatch()
+		}
+		chain = append(chain, c)
+	}
 
 	at := opts.now()
 	if signingTime != nil {
 		at = *signingTime
 	}
-	if code, why := checkProfile(leaf, at); code != "" {
+	if code, why := checkProfile(leaf, at, signerEKUs); code != "" {
 		add(code, why)
 	}
-
-	if trusted(leaf, s.X5Chain[1:], signingTime, opts) {
+	if trusted(leaf, chain, signingTime, opts) {
 		add(SigningCredentialTrusted, "signing certificate trusted, found in System trust anchors")
 	} else {
 		add(SigningCredentialUntrusted, "signing certificate untrusted")
@@ -129,12 +142,12 @@ func isDERSignature(sig []byte) bool {
 	return err == nil && len(rest) == 0
 }
 
-// trusted builds a chain from the signer through the x5chain intermediates
-// to a trust anchor. With a time-stamp, every certificate must be valid at
-// that time. Without one, c2pa-rs uses OpenSSL's NO_CHECK_TIME; Go always
-// checks validity, so the chain is tried at each certificate's notBefore and
+// trusted builds a chain from leaf through the given intermediates to a
+// trust anchor. With a time-stamp, every certificate must be valid at that
+// time. Without one, c2pa-rs uses OpenSSL's NO_CHECK_TIME; Go always checks
+// validity, so the chain is tried at each certificate's notBefore and
 // notAfter and accepted if it verifies at any of them.
-func trusted(leaf *x509.Certificate, chain [][]byte, signingTime *time.Time, opts *Options) bool {
+func trusted(leaf *x509.Certificate, chain []*x509.Certificate, signingTime *time.Time, opts *Options) bool {
 	if opts == nil || len(opts.TrustAnchors) == 0 {
 		return false
 	}
@@ -143,20 +156,14 @@ func trusted(leaf *x509.Certificate, chain [][]byte, signingTime *time.Time, opt
 		roots.AddCert(a)
 	}
 	inter := x509.NewCertPool()
-	certs := []*x509.Certificate{leaf}
-	for _, der := range chain {
-		c, err := x509.ParseCertificate(der)
-		if err != nil {
-			return false
-		}
+	for _, c := range chain {
 		inter.AddCert(c)
-		certs = append(certs, c)
 	}
 	var times []time.Time
 	if signingTime != nil {
 		times = []time.Time{*signingTime}
 	} else {
-		for _, c := range append(certs, opts.TrustAnchors...) {
+		for _, c := range append(append([]*x509.Certificate{leaf}, chain...), opts.TrustAnchors...) {
 			times = append(times, c.NotBefore, c.NotAfter)
 		}
 	}

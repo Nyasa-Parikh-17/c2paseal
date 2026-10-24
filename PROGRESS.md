@@ -8,6 +8,16 @@ Scope-creep ideas go here instead of being built.
 
 - Read claim v1 (`c2pa.claim`, C2PA 1.x files): `claim_generator` string,
   `claim_generator_info` as an array, single `assertions` list.
+- Actions rules that need ingredient relationships (c2pa-rs 2.b: opened →
+  one `parentOf`, placed → `componentOf`), `c2pa.translated` languages,
+  action/template icons, metadata rules, redaction rules.
+- Time-stamps: use the CMS `signingTime` signed attribute when present (as
+  c2pa-rs does); tell a bad CMS signature (`timeStamp.untrusted`) apart from
+  an unparseable token (`timeStamp.malformed`) — `digitorus/timestamp.Parse`
+  reports both as one error.
+- Legacy (pre-1.3) ingredient manifest hash fallback; redacted ingredients.
+- OCSP / revocation; allowed end-entity lists; BMFF, boxes and collection
+  hard bindings.
 
 ## Log
 
@@ -346,3 +356,69 @@ User approved and said they would re-check the results later.
   `sigTst2` and `pad` unprotected; payload nil — matches our decoder.
 - Not ported: issuer/subject unique-ID check (Go's x509 does not expose
   them), OCSP, allowed end-entity lists, ES384/ES512/PS*/Ed25519 (scope).
+
+### Phase 9 — Timestamp, hard binding, CLI verify (2026-10-24)
+
+**Environment incident (fixed)**
+- After a week away the build failed with `cannot find package` for every
+  external import. Cause: OneDrive had turned all 137 working-tree files
+  into cloud-file placeholders (reparse tag `0x9000a01a`); Go 1.27 on
+  Windows does not read such files correctly. Copies outside the folder
+  built fine. Fixed by rewriting each file in place with identical bytes
+  (`git status` clean). It can recur: OneDrive may convert them again.
+  Recommended: move the repo out of OneDrive (e.g. `C:\dev\c2paseal`).
+
+**Built**
+- `internal/asset`: format detection + extraction shared by Read and Verify.
+- `verify/timestamp.go`: RFC 3161 check per c2pa-rs: imprint over a COSE
+  CounterSignature structure (sigTst2: the signature as a CBOR bstr;
+  sigTst: the claim), TSA cert validity at genTime, TSA profile (no extra
+  EKUs) and trust against the same anchors. Statuses are success or
+  informational only; the time is used for signer checks only when the TSA
+  is trusted (c2pa-rs discards an untrusted time-stamp).
+- `verify/claim.go`: full per-claim order — reference/label, time-stamp,
+  credential + signature, hashed URIs (`match` / `mismatch` / `missing` /
+  `outsideManifest`), undeclared assertions, actions rules (empty array,
+  first action created/opened, only-first, created needs
+  digitalSourceType, opened/placed/removed need ingredients).
+- `verify/ingredient.go`: ingredient walk (manifest hash, `ingredient.manifest.*`,
+  unknown provenance, recursive claim checks) and c2pa-rs delta filtering
+  (drop statuses equal by code+url+kind to any recorded ingredient result,
+  never ones about the active manifest).
+- `verify/hardbinding.go`: `c2pa.hash.data` with exclusions (sorted, bounds
+  and overlap checked), extra-exclusion informational, remote URL, missing /
+  multiple bindings.
+- `verify.File(b, opts) *Result` (+ `State()`: Invalid / Valid / Trusted by
+  c2pa-rs's rule). Unreadable input never errors: no manifest →
+  `claim.missing`, JUMBF damage → `claim.malformed`, multiple stores →
+  `claim.multiple`, anything else → `general.error`.
+- Top level: `Verify(path, opts) []Status`, `VerifyFile`, `VerifyBytes`,
+  `VerifyOptions` (= `verify.Options`), `LoadTrustAnchors`.
+- CLI: `c2paseal inspect <file>`, `c2paseal verify [--json] [--trust pem]
+  <file>`; flags before or after the file; exit 0 valid, 1 invalid or
+  unreadable, 2 usage.
+
+**Results**
+- `TestCorpus`: **40/40** fixture × trust-mode pairs match the oracle —
+  active-manifest codes, URLs and order per kind, ingredient deltas, and
+  `validation_state`. The 8 files c2patool cannot read (5 unsigned,
+  truncated APP11, bad JUMBF length) each give exactly one failure status.
+- Unit tests: trusted time-stamp (time used → expired signer accepted),
+  untrusted / mismatched / garbage / duplicate / out-of-validity tokens;
+  10 hard-binding cases; 9 actions cases; reference checks; error mapping;
+  state rule. `TestFileMutations`: 6,000 corrupted fixtures, no panic, no
+  hang. CLI: exit codes on 8 fixtures, `--json`, `inspect`, usage errors.
+- `CGO_ENABLED=0 go build ./cmd/c2paseal` works; `c2paseal verify` runs on
+  fixtures. Full suite, vet, staticcheck clean. Coverage: verify 94.0%,
+  top level 87.1%, CLI 92.1%.
+
+**Notes**
+- `FuzzFile` exists but the Go fuzz engine on Windows manages only tens of
+  execs/s for it (each exec < 1 ms outside the engine); hence the
+  deterministic mutation test. Re-check fuzz throughput on Linux CI.
+- `claim.missing` / `claim.malformed` / `general.error` for unreadable
+  files is our mapping; c2patool prints an error instead of statuses.
+- Hard-binding-missing URL is the manifest URI (not confirmed against
+  c2pa-rs's `claim.uri()`; no fixture exercises it).
+
+### Gate B — awaiting decision (2026-10-24)

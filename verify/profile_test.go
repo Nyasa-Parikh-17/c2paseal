@@ -280,7 +280,7 @@ func TestProfile(t *testing.T) {
 		{"P-224", create(t, leafTemplate(), root, &p224.PublicKey, rootKey), "certificate unsupported EC curve"},
 	}
 	for _, tt := range tests {
-		_, got := checkProfile(tt.cert, at)
+		_, got := checkProfile(tt.cert, at, signerEKUs)
 		if got != tt.want {
 			t.Errorf("%s: %q, want %q", tt.name, got, tt.want)
 		}

@@ -51,11 +51,19 @@ var allowedSigAlgs = []x509.SignatureAlgorithm{
 	x509.PureEd25519,
 }
 
-// checkProfile applies the C2PA signing-certificate profile to the signer
-// certificate at time t (the validated time-stamp, else now). It mirrors
-// c2pa-rs check_end_entity_certificate_profile and returns the first problem
-// as (code, explanation), or ("", "") if the certificate passes.
-func checkProfile(cert *x509.Certificate, t time.Time) (code, explanation string) {
+// EKUs accepted beyond emailProtection, timeStamping and OCSPSigning (which
+// c2pa-rs always accepts): its valid_eku_oids.cfg list for claim signers,
+// nothing extra for time-stamp authorities.
+var (
+	signerEKUs = []asn1.ObjectIdentifier{oidEKUDocumentSigning, oidEKUMicrosoftC2PA, oidEKUC2PASigning}
+	tsaEKUs    []asn1.ObjectIdentifier
+)
+
+// checkProfile applies the C2PA certificate profile to an end-entity
+// certificate at time t (a validated time-stamp's time, else now). It
+// mirrors c2pa-rs check_end_entity_certificate_profile and returns the first
+// problem as (code, explanation), or ("", "") if the certificate passes.
+func checkProfile(cert *x509.Certificate, t time.Time, otherEKUs []asn1.ObjectIdentifier) (code, explanation string) {
 	invalid := func(why string) (string, string) { return SigningCredentialInvalid, why }
 
 	if cert.Version != 3 {
@@ -87,7 +95,7 @@ func checkProfile(cert *x509.Certificate, t time.Time) (code, explanation string
 		if slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageAny) {
 			return invalid("certificate 'any' EKU not allowed")
 		}
-		if !hasAllowedEKU(cert) {
+		if !hasAllowedEKU(cert, otherEKUs) {
 			return invalid("certificate missing required EKU")
 		}
 		has := func(u x509.ExtKeyUsage) bool { return slices.Contains(cert.ExtKeyUsage, u) }
@@ -134,16 +142,15 @@ func hasExtension(cert *x509.Certificate, oid asn1.ObjectIdentifier) bool {
 	return slices.ContainsFunc(cert.Extensions, func(e pkix.Extension) bool { return e.Id.Equal(oid) })
 }
 
-// hasAllowedEKU reports whether the certificate carries one of the EKUs
-// C2PA accepts (c2pa-rs valid_eku_oids.cfg).
-func hasAllowedEKU(cert *x509.Certificate) bool {
+// hasAllowedEKU reports whether the certificate carries an accepted EKU.
+func hasAllowedEKU(cert *x509.Certificate, other []asn1.ObjectIdentifier) bool {
 	for _, u := range cert.ExtKeyUsage {
 		if u == x509.ExtKeyUsageEmailProtection || u == x509.ExtKeyUsageTimeStamping || u == x509.ExtKeyUsageOCSPSigning {
 			return true
 		}
 	}
 	for _, oid := range cert.UnknownExtKeyUsage {
-		if oid.Equal(oidEKUDocumentSigning) || oid.Equal(oidEKUMicrosoftC2PA) || oid.Equal(oidEKUC2PASigning) {
+		if slices.ContainsFunc(other, oid.Equal) {
 			return true
 		}
 	}

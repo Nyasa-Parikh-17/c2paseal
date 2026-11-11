@@ -308,3 +308,33 @@ func FuzzStripInsert(f *testing.F) {
 		}
 	})
 }
+
+// WriteStore writes inside the caBX data only; UpdateCRC then fixes the CRC.
+func TestWriteStoreUpdateCRC(t *testing.T) {
+	store := testStore()
+	b, c, err := Insert(pngOf(ihdr, idat, iend), store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteStore(b, c, len(store)-4, []byte{1, 2, 3, 4}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Extract(b)
+	if err != nil || st.Chunk.CRCValid {
+		t.Fatalf("after WriteStore: err %v, CRC valid %v (want stale)", err, st != nil && st.Chunk.CRCValid)
+	}
+	if err := UpdateCRC(b, c); err != nil {
+		t.Fatal(err)
+	}
+	if st, err = Extract(b); err != nil || !st.Chunk.CRCValid || !bytes.HasSuffix(st.JUMBF, []byte{1, 2, 3, 4}) {
+		t.Errorf("after UpdateCRC: err %v, CRC valid %v", err, st != nil && st.Chunk.CRCValid)
+	}
+	for _, off := range []int{-1, len(store) - 3, len(store)} {
+		if err := WriteStore(b, c, off, []byte{0, 0, 0, 0}); !errors.Is(err, ErrOutOfRange) {
+			t.Errorf("WriteStore at %d: %v, want ErrOutOfRange", off, err)
+		}
+	}
+	if err := UpdateCRC(b[:c.End()-1], c); !errors.Is(err, ErrOutOfRange) {
+		t.Errorf("UpdateCRC on a short file: %v", err)
+	}
+}

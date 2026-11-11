@@ -22,14 +22,16 @@ CGO_ENABLED=0 go build -o c2paseal ./cmd/c2paseal
 
 (PowerShell: `$env:CGO_ENABLED=0; go build -o c2paseal.exe ./cmd/c2paseal`)
 
-**Sign** a JPEG. The repo's test certificates work out of the box:
+**Sign** a JPEG or PNG. The repo's test certificates work out of the box
+(add `--tsa <url>` for an RFC 3161 time-stamp):
 
 ```sh
 ./c2paseal sign --cert testdata/pki/leaf-chain.pem --key testdata/pki/leaf.key \
     --in testdata/unsigned/small.jpg --out signed.jpg --title "My photo"
 ```
 
-**Verify** it. Exit code 0 means valid, 1 invalid, 2 usage error:
+**Verify** it. Exit code 0 means valid, 1 invalid or failed, 2 usage error;
+every command takes `-h` and `--json`:
 
 ```sh
 ./c2paseal verify signed.jpg                                         # state: Valid (signer untrusted)
@@ -42,6 +44,18 @@ CGO_ENABLED=0 go build -o c2paseal ./cmd/c2paseal
 ```sh
 ./c2paseal inspect signed.jpg
 ```
+
+**Demo UI**: drop an image in the browser, see its manifest and status codes,
+sign it with the TEST ONLY key and see the re-verified result. Run it from the
+repository root (it reads `testdata/pki`):
+
+```sh
+./c2paseal serve          # http://127.0.0.1:8080/
+```
+
+**Interoperability**: `go run ./interop` checks the corpus and C2paSeal's own
+signed files with c2patool and c2pa-mcp and regenerates
+[INTEROP.md](INTEROP.md).
 
 From Go:
 

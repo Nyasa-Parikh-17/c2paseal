@@ -1,18 +1,8 @@
 package sign
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"io"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,122 +16,26 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/cbormode"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/fixtures"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/testtsa"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 	"github.com/digitorus/timestamp"
 )
 
-// fakeTSA is an offline RFC 3161 time-stamp authority whose certificate is
-// issued by the TEST ONLY root in testdata/pki, so validators that trust
-// that root also trust its tokens. Its fields select misbehaviour.
-type fakeTSA struct {
-	cert *x509.Certificate
-	key  crypto.Signer
-
-	at        func() time.Time // genTime; nil means now
-	status    int              // HTTP status; 0 means 200
-	reject    bool             // answer with a rejection PKIStatus
-	noCerts   bool             // leave the TSA certificate out of the token
-	badDigest bool             // time-stamp other data
-	badNonce  bool             // echo a different nonce
-	serialLen int              // serial number size in bytes; 0 means 8
-	requests  int
-}
-
-func newFakeTSA(t *testing.T) (*fakeTSA, *httptest.Server) {
+// newFakeTSA starts an offline time-stamp authority issued by the test root.
+func newFakeTSA(t *testing.T) (*testtsa.TSA, *httptest.Server) {
 	t.Helper()
 	dir, err := fixtures.Dir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	read := func(name string) *pem.Block {
-		b, err := os.ReadFile(filepath.Join(dir, "pki", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		blk, _ := pem.Decode(b)
-		return blk
-	}
-	root, err := x509.ParseCertificate(read("root.pem").Bytes)
+	f, err := testtsa.New(filepath.Join(dir, "pki"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootKey, err := x509.ParsePKCS8PrivateKey(read("root.key").Bytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixNano()),
-		Subject:      pkix.Name{CommonName: "C2paSeal Test TSA", Organization: []string{"C2paSeal TEST ONLY"}},
-		NotBefore:    root.NotBefore,
-		NotAfter:     root.NotAfter,
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
-	}, root, &key.PublicKey, rootKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cert, err := x509.ParseCertificate(der)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := &fakeTSA{cert: cert, key: key}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	return f, srv
-}
-
-func (f *fakeTSA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f.requests++
-	if f.status != 0 {
-		http.Error(w, "unavailable", f.status)
-		return
-	}
-	body, _ := io.ReadAll(r.Body)
-	req, err := timestamp.ParseRequest(body)
-	if err != nil || r.Header.Get("Content-Type") != "application/timestamp-query" {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	var resp []byte
-	if f.reject {
-		resp, err = timestamp.CreateErrorResponse(timestamp.Rejection, timestamp.BadRequest)
-	} else {
-		at := time.Now()
-		if f.at != nil {
-			at = f.at()
-		}
-		serialLen := f.serialLen
-		if serialLen == 0 {
-			serialLen = 8
-		}
-		ts := timestamp.Timestamp{
-			HashAlgorithm:     req.HashAlgorithm,
-			HashedMessage:     req.HashedMessage,
-			Time:              at.UTC().Truncate(time.Second),
-			Nonce:             req.Nonce,
-			Policy:            asn1.ObjectIdentifier{1, 2, 3, 4, 1},
-			SerialNumber:      new(big.Int).Lsh(big.NewInt(1), uint(8*serialLen-1)),
-			AddTSACertificate: !f.noCerts,
-		}
-		if f.badDigest {
-			ts.HashedMessage = make([]byte, len(req.HashedMessage))
-		}
-		if f.badNonce {
-			ts.Nonce = big.NewInt(7)
-		}
-		resp, err = ts.CreateResponseWithOpts(f.cert, f.key, crypto.SHA256)
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/timestamp-reply")
-	w.Write(resp)
 }
 
 // TestTimestampHeaderSize: whatever the token's length up to the reserve,
@@ -182,7 +76,7 @@ func TestTimestampedJPEG(t *testing.T) {
 	chain, key := testPKI(t)
 	tsa, srv := newFakeTSA(t)
 	stampTime := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
-	tsa.at = func() time.Time { return stampTime }
+	tsa.At = func() time.Time { return stampTime }
 	afterExpiry := func() time.Time { return chain[0].NotAfter.AddDate(1, 0, 0) }
 
 	for _, f := range unsignedJPEGs(t) {
@@ -196,7 +90,7 @@ func TestTimestampedJPEG(t *testing.T) {
 		}
 		var lengths []int
 		for _, serialLen := range []int{1, 8, 20} { // tokens of different sizes
-			tsa.serialLen = serialLen
+			tsa.SerialLen = serialLen
 			out, err := JPEG(in, &Options{Chain: chain, Signer: key, TSAURL: srv.URL})
 			if err != nil {
 				t.Fatalf("%s: %v", f.Name, err)
@@ -243,16 +137,16 @@ func TestTimestampFailures(t *testing.T) {
 	in := readFixture(t, unsignedJPEGs(t)[0])
 	tests := []struct {
 		name    string
-		setup   func(*fakeTSA)
+		setup   func(*testtsa.TSA)
 		reserve int
 		want    error
 	}{
-		{"HTTP 503", func(f *fakeTSA) { f.status = http.StatusServiceUnavailable }, 0, ErrTimestamp},
-		{"rejected", func(f *fakeTSA) { f.reject = true }, 0, ErrTimestamp},
-		{"wrong imprint", func(f *fakeTSA) { f.badDigest = true }, 0, ErrTimestamp},
-		{"wrong nonce", func(f *fakeTSA) { f.badNonce = true }, 0, ErrTimestamp},
-		{"no TSA certificate", func(f *fakeTSA) { f.noCerts = true }, 0, ErrTimestamp},
-		{"token over reserve", func(*fakeTSA) {}, 200, ErrTimestampTooLarge},
+		{"HTTP 503", func(f *testtsa.TSA) { f.Status = http.StatusServiceUnavailable }, 0, ErrTimestamp},
+		{"rejected", func(f *testtsa.TSA) { f.Reject = true }, 0, ErrTimestamp},
+		{"wrong imprint", func(f *testtsa.TSA) { f.BadDigest = true }, 0, ErrTimestamp},
+		{"wrong nonce", func(f *testtsa.TSA) { f.BadNonce = true }, 0, ErrTimestamp},
+		{"no TSA certificate", func(f *testtsa.TSA) { f.NoCerts = true }, 0, ErrTimestamp},
+		{"token over reserve", func(*testtsa.TSA) {}, 200, ErrTimestampTooLarge},
 	}
 	for _, tt := range tests {
 		tsa, srv := newFakeTSA(t)
@@ -261,8 +155,8 @@ func TestTimestampFailures(t *testing.T) {
 		if !errors.Is(err, tt.want) || out != nil {
 			t.Errorf("%s: err = %v, output %d bytes; want %v and no output", tt.name, err, len(out), tt.want)
 		}
-		if tsa.requests != 1 {
-			t.Errorf("%s: %d TSA requests, want 1", tt.name, tsa.requests)
+		if tsa.Requests() != 1 {
+			t.Errorf("%s: %d TSA requests, want 1", tt.name, tsa.Requests())
 		}
 	}
 

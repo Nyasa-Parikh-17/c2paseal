@@ -99,7 +99,7 @@ func TestResignPNG(t *testing.T) {
 func TestPNGThumbnailAndTimestamp(t *testing.T) {
 	chain, key := testPKI(t)
 	tsa, srv := newFakeTSA(t)
-	tsa.at = func() time.Time { return time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC) }
+	tsa.At = func() time.Time { return time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC) }
 	in := readFixture(t, unsignedPNGs(t)[0])
 	thumb := &assertion.Thumbnail{Format: "image/png", Data: bytes.Repeat([]byte{0xCD}, 200_000)}
 	out, err := PNG(in, &Options{Chain: chain, Signer: key, Thumbnail: thumb, TSAURL: srv.URL})

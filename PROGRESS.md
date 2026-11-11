@@ -584,3 +584,124 @@ tests (incl. `TestC2patool` with c2patool on PATH) green; nothing left.
 - `Sign` has no `context.Context`; the TSA call is bounded only by the
   HTTP client's timeout.
 - The live DigiCert check is manual, not in CI (needs network).
+
+### Phase 13 — PNG signing + fuzzing (2026-11-11)
+
+**Built**
+- `sign.PNG`: the same reserve-and-backfill flow, with the store in one
+  `caBX` chunk straight after IHDR. The signer is now format-agnostic
+  (`sign/embed.go`, a small `container` interface; JPEG and PNG adapters).
+  The hard-binding exclusion is the whole chunk (length+type+data+CRC), as
+  c2patool's own PNGs have it (`ts.png`: exclusion [33, 42984) = the caBX
+  chunk), so the CRC, computed last after every backfill, is outside the
+  hash. Step 7 also checks the CRC.
+- `png.WriteStore` / `png.UpdateCRC` (in-place writes, out-of-range errors).
+- Top level `Sign`/`SignBytes` and the CLI accept PNG; `ErrSignFormat` now
+  only for non-JPEG/PNG input.
+- New fuzz targets: `manifest.FuzzDecodeClaim`, `manifest.FuzzDecodeStore`
+  (with URI resolution and hashing), `cose.FuzzDecode`,
+  `assertion.FuzzDecode`, `sign.FuzzSign` (anything signed must verify with
+  only `signingCredential.untrusted`). `fixtures.SignedFiles` seeds them.
+
+**Results**
+- Signed PNGs (both unsigned fixtures, plus re-signing c2patool's `ts.png`,
+  plus a 200 KB thumbnail with a time-stamp) verify in our verifier (Valid /
+  Trusted) and in c2patool (`TestC2patoolPNG`, with and without a TSA).
+  Image tamper → `assertion.dataHash.mismatch`; signature tamper →
+  `claimSignature.mismatch`; mis-sized placeholders → `ErrSizeMismatch`.
+- Fuzzing, 5 min per target, 12 targets, ~100 M executions in total:
+  jumbf Parse 13.0 M; jpeg Segments 22.3 M, Extract 17.3 M, StripInsert
+  11.8 M; png Chunks 6.8 M, StripInsert 6.4 M; manifest DecodeClaim 14.4 M,
+  DecodeStore 0.46 M; cose Decode 4.7 M; assertion Decode 1.7 M; sign
+  FuzzSign 0.26 M; verify FuzzFile 0.81 M. **No findings**: no crashes,
+  hangs or property failures; no crashers to add to `testdata/fuzz`.
+- `container/png` coverage 95.2%, sign 86.2%.
+
+### Gate C — approved (2026-11-11)
+User asked to continue with Phases 14–15 (fuzz run was half done, all
+clean so far; it then finished clean).
+
+### Phase 14 — Interop harness (2026-11-11)
+
+**Decisions (user)**
+- richardwooding/c2pa is run as an **external CLI**, `c2pa-mcp`, not added
+  to `go.mod`. Verified first that it is real: pkg.go.dev v0.7.1 (MIT),
+  public repo; installed with `go install …@latest` → v0.7.1, built on
+  `github.com/richardwooding/c2pa v0.22.1`; `verify --json` gives C2PA
+  status codes. If it fails to install, the harness shows it as not
+  installed — never a silent switch to the library.
+- c2patool (the CAI's official CLI, our oracle) is the second validator.
+
+**Built**
+- `go run ./interop` regenerates `INTEROP.md` from scratch: every JPEG/PNG
+  fixture plus each unsigned fixture signed by C2paSeal (with and without a
+  time-stamp from a local test TSA), × C2paSeal / c2patool / c2pa-mcp,
+  × default and trusted mode. Report: setup note (install c2pa-mcp first
+  and check it; c2patool second), tool versions, comparison rule, matrix,
+  and a section per disagreement with container facts computed from the
+  bytes (store location, exclusions vs store range, recomputed data hash,
+  hashed-URI mismatches, first action, signer validity, TSA) and a cause.
+- Causes live in `interop/causes.go`; each matches the exact status pattern
+  it explains, so a changed behaviour shows as "unexplained".
+- `-require c2patool,c2pa-mcp` fails if a tool is missing; `-strict` fails
+  on unexplained disagreements. `internal/testtsa` (shared fake TSA, moved
+  out of the sign tests).
+- `.github/workflows/interop.yml`: on `v*` tags and manual dispatch;
+  installs and checks c2pa-mcp v0.7.1 first, then c2patool 0.27.21 via
+  `cargo install` (cached), runs `-require … -strict`, uploads INTEROP.md.
+
+**Results**
+- 30 files × 2 modes = 60 checks; 34 agree, 26 disagree, 26 explained,
+  0 unexplained. **C2paSeal and c2patool agree on every file where
+  c2patool produces statuses.** The disagreements: c2patool exits with an
+  error on unreadable files (5 unsigned, 2 broken); for the 2 broken
+  containers there is no oracle status (we: `claim.malformed` /
+  `general.error`; c2pa-mcp: `claim.missing`); c2pa-mcp treats
+  `timeStamp.untrusted` as a failure (c2pa-rs and we: informational);
+  c2pa-mcp does not report `assertion.action.malformed` on the tampered
+  actions assertion, nor `signingCredential.untrusted` for an expired
+  signer.
+- Checked: delete INTEROP.md → `go run ./interop` recreates it; with
+  c2pa-mcp off PATH the column shows `-` and `-require c2pa-mcp` fails.
+
+**Open issues / deviations**
+- No c2pa-rs library wrapper: no Rust toolchain here, and c2patool is
+  the c2pa-rs CLI. Listed as "not run" in the report.
+- The CI workflow has not run (repo not pushed); the c2patool build via
+  cargo is the slow step (cached after the first run).
+- c2pa-mcp was installed from `@latest` locally (v0.7.1); CI pins v0.7.1.
+
+### Phase 15 — CLI v1 + demo UI (2026-11-11)
+
+**Built**
+- CLI: `inspect`, `verify`, `sign`, `serve`, `version`; every command
+  answers `-h` (exit 0) and takes `--json`; with `--json`, errors are
+  `{"error": …}` on stdout. Exit codes documented: 0 ok/valid; 1 invalid,
+  unreadable or failed; 2 usage or unloadable option files.
+- `web` package: `Handler` with `GET /`, `POST /api/verify`,
+  `POST /api/sign` (multipart `file`, optional `trust=1`). All logic is the
+  library's: the server returns the manifest store (c2patool-shaped JSON),
+  flattened statuses with their kind, the state, and for sign the signed
+  bytes (re-verified). The embedded page only renders: drop zone, coloured
+  statuses, state badge, collapsible manifest tree (text only, no HTML
+  injection), download link. TEST ONLY banner on the page; uploads capped
+  at 32 MB; CSP header.
+- `c2paseal serve [--addr 127.0.0.1:8080] [--pki testdata/pki]`: localhost
+  by default; graceful shutdown on Ctrl+C.
+
+**Results**
+- `TestDropVerifySignReverify` (HTTP level, JPEG and PNG): unsigned →
+  Invalid `claim.missing`; sign → Valid (untrusted) / Trusted with
+  trust=1; the downloaded bytes verify and, dropped again, are Trusted.
+- Real binary smoke test: `serve` started, `curl` drove verify → sign →
+  re-verify for small.jpg and small.png (Trusted, no failures).
+- Page script passes `node --check`.
+- Full suite, vet, staticcheck clean. Coverage: CLI 94.4%, web 85.9%.
+
+**Open issues**
+- **The browser check itself (drag-and-drop and rendering) has not been
+  done**: no browser was available to this session. Needs a manual run:
+  `c2paseal serve`, open http://127.0.0.1:8080/, drop
+  `testdata/unsigned/small.jpg` and `small.png`, press Sign.
+- `serve` needs `testdata/pki` (run from the repo root or pass `--pki`);
+  the test keys are deliberately not embedded in the binary.

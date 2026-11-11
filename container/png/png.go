@@ -180,3 +180,29 @@ func Insert(b, store []byte) ([]byte, Chunk, error) {
 	out = append(out, b[at:]...)
 	return out, Chunk{Type: TypeC2PA, Offset: at, Length: len(store), CRCValid: true}, nil
 }
+
+// ErrOutOfRange is returned by WriteStore and UpdateCRC for a write or chunk
+// outside the file or outside the inserted caBX chunk's data.
+var ErrOutOfRange = errors.New("write outside the inserted manifest store")
+
+// WriteStore overwrites bytes of a manifest store that Insert has already
+// placed in file, without moving anything: data replaces the store bytes at
+// [storeOff, storeOff+len(data)) of chunk c's data. The chunk CRC is left
+// stale; call UpdateCRC once all writes are done.
+func WriteStore(file []byte, c Chunk, storeOff int, data []byte) error {
+	if storeOff < 0 || storeOff+len(data) > c.Length || c.End() > len(file) || c.Offset < 0 {
+		return fmt.Errorf("png: %w: store offset %d, %d bytes", ErrOutOfRange, storeOff, len(data))
+	}
+	copy(file[c.Offset+8+storeOff:], data)
+	return nil
+}
+
+// UpdateCRC recomputes chunk c's CRC (over its type and data) in place.
+func UpdateCRC(file []byte, c Chunk) error {
+	if c.Offset < 0 || c.Length < 0 || c.End() > len(file) {
+		return fmt.Errorf("png: %w: chunk at %d", ErrOutOfRange, c.Offset)
+	}
+	crc := crc32.ChecksumIEEE(file[c.Offset+4 : c.Offset+8+c.Length])
+	binary.BigEndian.PutUint32(file[c.Offset+8+c.Length:], crc)
+	return nil
+}

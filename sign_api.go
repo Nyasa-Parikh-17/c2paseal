@@ -17,11 +17,11 @@ import (
 // sign.Options for the rest.
 type SignOptions = sign.Options
 
-// ErrSignFormat is returned when asked to sign a file format the signer
-// does not support yet (only JPEG).
-var ErrSignFormat = errors.New("c2paseal: signing supports JPEG only")
+// ErrSignFormat is returned when asked to sign a file that is neither JPEG
+// nor PNG.
+var ErrSignFormat = errors.New("c2paseal: signing supports JPEG and PNG only")
 
-// Sign reads the JPEG at in, embeds a newly signed C2PA manifest store and
+// Sign reads the JPEG or PNG at in, embeds a newly signed C2PA manifest store and
 // writes the result to out (atomically, via a temporary file in out's
 // directory). An existing manifest store in the input is replaced.
 func Sign(in, out string, opts *SignOptions) error {
@@ -53,10 +53,13 @@ func Sign(in, out string, opts *SignOptions) error {
 
 // SignBytes is Sign for a file already in memory.
 func SignBytes(b []byte, opts *SignOptions) ([]byte, error) {
-	if asset.Detect(b) != asset.JPEG {
-		return nil, ErrSignFormat
+	switch asset.Detect(b) {
+	case asset.JPEG:
+		return sign.JPEG(b, opts)
+	case asset.PNG:
+		return sign.PNG(b, opts)
 	}
-	return sign.JPEG(b, opts)
+	return nil, ErrSignFormat
 }
 
 // LoadSigner reads a PEM certificate chain (signer first, then

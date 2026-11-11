@@ -27,7 +27,7 @@ import (
 )
 
 // testPKI loads the TEST ONLY signer chain and key from testdata/pki.
-func testPKI(t *testing.T) ([]*x509.Certificate, crypto.Signer) {
+func testPKI(t testing.TB) ([]*x509.Certificate, crypto.Signer) {
 	t.Helper()
 	dir, err := fixtures.Dir()
 	if err != nil {

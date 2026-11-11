@@ -191,7 +191,7 @@ func TestMisSizedPlaceholder(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, n := range []int{63, 65, 0} {
-		out, err := signJPEG(in, &Options{Chain: chain, Signer: key}, buildConfig{sigLen: n})
+		out, err := embed(in, &Options{Chain: chain, Signer: key}, buildConfig{sigLen: n}, &jpegContainer{})
 		if !errors.Is(err, ErrSizeMismatch) || out != nil {
 			t.Errorf("signature placeholder of %d bytes: err %v, output %d bytes; want ErrSizeMismatch, none", n, err, len(out))
 		}

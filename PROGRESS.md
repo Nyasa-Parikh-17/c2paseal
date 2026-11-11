@@ -527,3 +527,60 @@ time-stamps when signing, test PKI only, no UI / interop / release tooling.
   and corpus before then.
 - OneDrive may turn the working tree into cloud placeholders again, which
   breaks `go build` (see Phase 9). Moving the repo out of OneDrive avoids it.
+
+### Phase 12 — Timestamps in signing (2026-11-11)
+
+Gate B had limited the MVP to "no time-stamps when signing"; the user
+asked to start Phase 12 on 2026-11-11. Phase 11 re-checked first: build,
+tests (incl. `TestC2patool` with c2patool on PATH) green; nothing left.
+
+**Built**
+- `Options.TSAURL`, `Options.TSAClient` (nil → 30 s timeout),
+  `Options.TimestampReserve` (0 → `DefaultTimestampReserve` = 10 KiB, max
+  60000); `ErrBadTSA`, `ErrTimestamp`, `ErrTimestampTooLarge`.
+- `sign/timestamp.go`: the token time-stamps the signature, so it can only
+  be fetched after step 6, and its length varies by TSA. Chosen: reserve
+  the slot. With a TSA set, the COSE unprotected header is always
+  `{"pad": bstr, "sigTst2": {"tstTokens": [{"val": token}]}}` encoded to a
+  fixed size; the zero-filled `pad` (the key c2pa-rs uses) absorbs the
+  difference and is kept ≥ 256 bytes so its CBOR head is always 3 bytes and
+  every token length up to the reserve fits exactly. Size mismatches return
+  `ErrSizeMismatch` / `ErrTimestampTooLarge` in production code; step 7's
+  length check still covers the whole store.
+- Request: SHA-256 imprint over the COSE `CounterSignature` structure of
+  the signature (same bytes `verify/timestamp.go` checks), random 64-bit
+  nonce, `certReq` true. Response checked: granted status and CMS signature
+  (`ParseResponse`), imprint, nonce echo, TSA certificate present, size
+  within reserve; response body capped at 1 MiB.
+- CLI: `c2paseal sign … --tsa <url>`.
+
+**Results**
+- `TestTimestampedJPEG` (offline fake TSA via `httptest`, cert issued by
+  the test root): every unsigned JPEG fixture verifies Trusted with no
+  failures and `timeStamp.validated` + `timeStamp.trusted`, checked a year
+  *after the signer expired*; the same file without a token fails with
+  `signingCredential.expired` — so our verifier uses the token's time.
+  Token genTime read back equals the TSA's time. Tokens of three sizes
+  give identical output lengths.
+- `TestC2patoolTimestamp`: c2patool Valid (only `signingCredential.untrusted`)
+  and, with the test root trusted, Trusted with no failures and
+  `timeStamp.validated` / `timeStamp.trusted`.
+- `TestTimestampFailures`: HTTP 503, rejection, wrong imprint, wrong nonce,
+  no TSA cert, token over reserve, unreachable TSA → error, no output.
+  `TestTimestampHeaderSize`: exact size for token lengths across every CBOR
+  head boundary, reserve+1 rejected. CLI: failing `--tsa` exits 1, no file.
+- Manual live check: signed `unsigned/small.jpg` with
+  `http://timestamp.digicert.com` via the CLI; our verifier and c2patool
+  give the same statuses as c2patool's own DigiCert-stamped fixture
+  `titled-ts.jpg` (Valid / Trusted, `timeStamp.validated`, informational
+  `timeStamp.untrusted` since DigiCert's root is not in the test anchors).
+- Build, vet, staticcheck, full suite clean. Coverage: sign 86.8%, top
+  level 85.9%, CLI 93.1%.
+
+**Open issues**
+- Every time-stamped file carries the full reserve (~10 KiB) whatever the
+  token's size. A TSA whose tokens exceed 10 KiB needs `TimestampReserve`
+  raised (no CLI flag for it yet).
+- `Sign` has no `context.Context`; the TSA call is bounded only by the
+  HTTP client's timeout.
+- The live DigiCert check is manual, not in CI (needs network).

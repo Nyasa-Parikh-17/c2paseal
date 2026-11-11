@@ -1,9 +1,9 @@
 // Command c2paseal inspects, verifies and signs C2PA Content Credentials.
-// It reads and verifies JPEG and PNG, and signs JPEG.
+// It reads, verifies and signs JPEG and PNG.
 //
 //	c2paseal inspect <file>
 //	c2paseal verify [--json] [--trust anchors.pem] <file>
-//	c2paseal sign --cert chain.pem --key key.pem --in in.jpg --out out.jpg [--title t] [--source-type uri]
+//	c2paseal sign --cert chain.pem --key key.pem --in in --out out [--title t] [--source-type uri] [--tsa url]
 //
 // Exit codes: 0 = success / valid, 1 = invalid, unreadable or signing failed,
 // 2 = usage error.
@@ -35,8 +35,8 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `usage:
   c2paseal inspect <file>                              print the manifest store as JSON
   c2paseal verify [--json] [--trust anchors.pem] <file> validate the manifest store
-  c2paseal sign --cert chain.pem --key key.pem --in in.jpg --out out.jpg [--title t] [--source-type uri]
-                                                       sign a JPEG (replaces any existing manifest)
+  c2paseal sign --cert chain.pem --key key.pem --in in --out out [--title t] [--source-type uri] [--tsa url]
+                                                       sign a JPEG or PNG (replaces any existing manifest)
 
 exit codes: 0 success/valid, 1 invalid, unreadable or signing failed, 2 usage error`)
 }
@@ -140,9 +140,10 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	cert := fs.String("cert", "", "PEM certificate chain: signer first, then intermediates")
 	key := fs.String("key", "", "PEM private key of the signer (ECDSA P-256)")
-	in := fs.String("in", "", "JPEG to sign")
-	out := fs.String("out", "", "where to write the signed JPEG")
+	in := fs.String("in", "", "JPEG or PNG to sign")
+	out := fs.String("out", "", "where to write the signed file")
 	title := fs.String("title", "", "optional dc:title for the claim")
+	tsa := fs.String("tsa", "", "RFC 3161 time-stamp authority URL; time-stamps the signature (needs network)")
 	source := fs.String("source-type", "", "IPTC digital source type for the c2pa.created action (default "+sign.DefaultDigitalSourceType+")")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
@@ -157,7 +158,7 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
-	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source}
+	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source, TSAURL: *tsa}
 	if err := c2paseal.Sign(*in, *out, opts); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitInvalid

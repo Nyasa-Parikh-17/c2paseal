@@ -39,8 +39,18 @@ func TestSign(t *testing.T) {
 		t.Errorf("temporary files left behind: %d entries", len(entries))
 	}
 
-	if err := Sign(filepath.Join(dir, "unsigned", "small.png"), out, opts); !errors.Is(err, ErrSignFormat) {
-		t.Errorf("signing PNG: %v, want ErrSignFormat", err)
+	pngOut := filepath.Join(t.TempDir(), "signed.png")
+	if err := Sign(filepath.Join(dir, "unsigned", "small.png"), pngOut, opts); err != nil {
+		t.Errorf("signing PNG: %v", err)
+	} else if got := VerifyFile(pngOut, nil).State(); got != verify.Valid {
+		t.Errorf("signed PNG state %s, want Valid", got)
+	}
+	notImage := filepath.Join(t.TempDir(), "x.txt")
+	if err := os.WriteFile(notImage, []byte("not an image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sign(notImage, out, opts); !errors.Is(err, ErrSignFormat) {
+		t.Errorf("signing a text file: %v, want ErrSignFormat", err)
 	}
 	if err := Sign(filepath.Join(dir, "no-such.jpg"), out, opts); err == nil {
 		t.Error("signing a missing file succeeded")

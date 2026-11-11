@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,7 +134,26 @@ func TestSignCommand(t *testing.T) {
 			t.Errorf("run(%q) = %d, want %d", a, code, exitUsage)
 		}
 	}
-	if code := run([]string{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.png"), "--out", out}, io.Discard, io.Discard); code != exitInvalid {
-		t.Errorf("signing a PNG: exit %d, want %d", code, exitInvalid)
+	pngOut := filepath.Join(t.TempDir(), "out.png")
+	if code := run([]string{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.png"), "--out", pngOut}, io.Discard, io.Discard); code != exitValid {
+		t.Errorf("signing a PNG: exit %d, want %d", code, exitValid)
+	}
+	if code := run([]string{"verify", pngOut}, io.Discard, io.Discard); code != exitValid {
+		t.Errorf("verify of CLI-signed PNG: exit %d", code)
+	}
+	if code := run([]string{"sign", "--cert", cert, "--key", key, "--in", cert, "--out", out}, io.Discard, io.Discard); code != exitInvalid {
+		t.Errorf("signing a PEM file: exit %d, want %d", code, exitInvalid)
+	}
+
+	// A TSA that does not answer makes signing fail, with no output file.
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	tsaOut := filepath.Join(t.TempDir(), "tsa.jpg")
+	var stderr bytes.Buffer
+	if code := run([]string{"sign", "--cert", cert, "--key", key, "--in", fixture(t, "unsigned/small.jpg"), "--out", tsaOut, "--tsa", srv.URL}, io.Discard, &stderr); code != exitInvalid || !strings.Contains(stderr.String(), "time-stamp") {
+		t.Errorf("sign --tsa (404): exit %d, stderr %q; want %d and a time-stamp error", code, stderr.String(), exitInvalid)
+	}
+	if _, err := os.Stat(tsaOut); !os.IsNotExist(err) {
+		t.Errorf("sign --tsa (404) left an output file: %v", err)
 	}
 }

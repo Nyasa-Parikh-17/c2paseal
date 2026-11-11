@@ -61,6 +61,7 @@ type Manifest struct {
 
 	protected []byte // serialised COSE protected header
 	sigLen    int    // placeholder signature length (esSignatureLen)
+	tstSize   int    // reserved unprotected header size; 0 = no time-stamp
 	binding   [2]uint64
 	digest    []byte
 }
@@ -153,7 +154,12 @@ func build(opts *Options, cfg buildConfig) (*Manifest, error) {
 	if m.protected, err = protectedHeader(opts); err != nil {
 		return nil, err
 	}
-	sigCBOR, err := m.coseSign1(make([]byte, m.sigLen))
+	if opts.TSAURL != "" {
+		if m.tstSize, err = tstHeaderSize(opts.timestampReserve()); err != nil {
+			return nil, err
+		}
+	}
+	sigCBOR, err := m.coseSign1(make([]byte, m.sigLen), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -209,8 +215,9 @@ func (m *Manifest) SetDigest(digest []byte) (patch, error) {
 }
 
 // Seal re-hashes the hard-binding assertion, updates its hashed URI in the
-// claim and signs the claim (step 6). It returns the claim and signature
-// patches.
+// claim and signs the claim (step 6). With Options.TSAURL set it then
+// time-stamps the signature, which needs the network. It returns the claim
+// and signature patches.
 func (m *Manifest) Seal() ([]patch, error) {
 	ref, err := hashedURI(m.hashSup)
 	if err != nil {
@@ -240,7 +247,17 @@ func (m *Manifest) Seal() ([]patch, error) {
 	if err != nil {
 		return nil, err
 	}
-	sigCBOR, err := m.coseSign1(sig)
+	var token []byte
+	if m.tstSize > 0 {
+		data, err := m.counterSignatureData(sig)
+		if err != nil {
+			return nil, fmt.Errorf("sign: encode countersignature data: %w", err)
+		}
+		if token, err = m.opts.fetchTimestamp(data); err != nil {
+			return nil, err
+		}
+	}
+	sigCBOR, err := m.coseSign1(sig, token)
 	if err != nil {
 		return nil, err
 	}
@@ -268,9 +285,15 @@ func (m *Manifest) signClaim(claim []byte) ([]byte, error) {
 	return sig, nil
 }
 
-// coseSign1 encodes the tagged COSE_Sign1 with a detached payload.
-func (m *Manifest) coseSign1(sig []byte) ([]byte, error) {
-	return cbormode.Enc.Marshal(cbor.Tag{Number: 18, Content: []any{m.protected, map[any]any{}, nil, sig}})
+// coseSign1 encodes the tagged COSE_Sign1 with a detached payload. With a
+// time-stamp slot reserved, the unprotected header always encodes to
+// m.tstSize bytes, whatever the token (nil for the placeholder).
+func (m *Manifest) coseSign1(sig, token []byte) ([]byte, error) {
+	unprotected, err := tstHeader(token, m.tstSize)
+	if err != nil {
+		return nil, err
+	}
+	return cbormode.Enc.Marshal(cbor.Tag{Number: 18, Content: []any{m.protected, unprotected, nil, sig}})
 }
 
 // protectedHeader encodes {alg: ES256, x5chain: chain}.

@@ -1,11 +1,11 @@
 # C2paSeal
 
 A pure-Go, CGO-free **signer and verifier** for [C2PA](https://c2pa.org)
-Content Credentials in **JPEG** files. It also reads and verifies PNG.
+Content Credentials in **JPEG** and **PNG** files.
 
 Pure-Go C2PA readers already exist. C2paSeal adds a signer that needs no
 CGO, no Rust toolchain and no external tools: it builds a C2PA 2.4 manifest,
-embeds it in the JPEG, binds it to the image bytes (`c2pa.hash.data`) and
+embeds it in the JPEG or PNG, binds it to the image bytes (`c2pa.hash.data`) and
 signs it with ES256. Its output is accepted by `c2patool`; see
 [testdata/mvp-evidence/](testdata/mvp-evidence/).
 
@@ -57,10 +57,11 @@ store, err := c2paseal.Read("out.jpg")
 
 ## Current limits
 
-- **Signing is JPEG only.** PNG files can be read and verified but not signed.
-- **No timestamps when signing.** Signed files carry no RFC 3161 time-stamp,
-  so validators check the certificate against the current time. Existing
-  time-stamps are verified.
+- **JPEG and PNG only.** No video, BMFF or other formats.
+- **Time-stamps are optional.** Set `SignOptions.TSAURL` (CLI `--tsa`) to add
+  an RFC 3161 time-stamp; without one, validators check the certificate
+  against the current time. Each time-stamped file reserves about 10 KiB for
+  the token.
 - **ES256 (ECDSA P-256) only**, for signing and for verifying claim signatures.
 - **The test certificates are untrusted.** `testdata/pki` is a TEST ONLY
   PKI whose private keys are public. Files signed with it show

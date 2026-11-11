@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/assertion"
 )
@@ -44,6 +46,19 @@ type Options struct {
 	// Thumbnail is an optional claim thumbnail (c2pa.thumbnail.claim).
 	Thumbnail *assertion.Thumbnail
 
+	// TSAURL, if set, is an RFC 3161 time-stamp authority. The signature is
+	// time-stamped and the token stored as sigTst2 in the COSE unprotected
+	// header, so validators can check the signer against the TSA's time
+	// instead of the current time.
+	TSAURL string
+	// TSAClient sends time-stamp requests; nil means an http.Client with a
+	// 30-second timeout.
+	TSAClient *http.Client
+	// TimestampReserve is the largest token, in bytes, that the manifest
+	// reserves room for; zero means DefaultTimestampReserve. The reserved
+	// space is in the file whatever the real token's size.
+	TimestampReserve int
+
 	// Rand supplies randomness for salts and UUIDs; nil means crypto/rand.
 	// Signatures always use crypto/rand.
 	Rand io.Reader
@@ -56,6 +71,7 @@ var (
 	ErrUnsupported  = errors.New("sign: only ECDSA P-256 (ES256) keys are supported")
 	ErrBadActions   = errors.New("sign: invalid actions")
 	ErrBadThumbnail = errors.New("sign: thumbnail needs a media type and data")
+	ErrBadTSA       = errors.New("sign: invalid time-stamp options")
 )
 
 func (o *Options) rand() io.Reader {
@@ -63,6 +79,13 @@ func (o *Options) rand() io.Reader {
 		return o.Rand
 	}
 	return rand.Reader
+}
+
+func (o *Options) timestampReserve() int {
+	if o.TimestampReserve == 0 {
+		return DefaultTimestampReserve
+	}
+	return o.TimestampReserve
 }
 
 func (o *Options) generator() (string, string) {
@@ -123,6 +146,15 @@ func (o *Options) validate() error {
 	}
 	if t := o.Thumbnail; t != nil && (t.Format == "" || len(t.Data) == 0) {
 		return ErrBadThumbnail
+	}
+	if o.TimestampReserve < 0 || o.TimestampReserve > MaxTimestampReserve {
+		return fmt.Errorf("%w: reserve %d bytes not in 0..%d", ErrBadTSA, o.TimestampReserve, MaxTimestampReserve)
+	}
+	if o.TSAURL != "" {
+		u, err := url.Parse(o.TSAURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%w: TSA URL %q is not an http(s) URL", ErrBadTSA, o.TSAURL)
+		}
 	}
 	return nil
 }

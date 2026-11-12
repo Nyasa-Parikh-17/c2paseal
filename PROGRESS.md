@@ -756,3 +756,75 @@ clean so far; it then finished clean).
   tag exists. Next: push, confirm `ci` is green, then tag `v0.1.0` and push
   the tag (ask first — PHASES.md).
 - Phase 15 browser check still pending.
+
+### Phase 16 — closed (2026-11-12)
+
+The user committed the Phase 16 work and pushed tag `v0.1.0` (commit
+e607c78). On GitHub, `ci` on main, plus `ci`, `release` and `interop` on
+the tag, are all green. The release is published with 6 archives and
+SHA256SUMS. Phase 16's "Done when" checks now pass.
+
+### Phase 17 — Audit and plan (2026-11-12)
+
+**Built**
+- Read `PRODUCT_SPEC.md` (2026-11-11) against PROGRESS.md, PHASES.md and
+  INTEROP.md.
+- Appended "Part 2" to PHASES.md: Phases 17–33, release gates D–J, and a
+  list of spec items that were already done. No code changed.
+
+**Spec items already done (left out of the new phases)**
+- PNG signing, trust anchors and EKU checks.
+- RFC 3161 time-stamps, both verified and written.
+- The local `serve` UI.
+- The CLI with `--json` and exit codes.
+- Fuzz targets on current parsers.
+- The interop matrix in CI.
+- The release pipeline with checksums.
+- Part of the negative fixture set.
+
+**Spec items not assigned to any phase, now added**
+- CLI batch mode, added to Phase 19.
+- Nightly fuzzing, CHANGELOG and reproducible builds, added to Phase 21.
+
+**Checked**
+- Credentio exists: Google's open-source C++ C2PA validator, Apache-2.0,
+  announced 2026-08-13, hosted at mediaprovenance.googlesource.com.
+  - It validates C2PA 2.2 and 2.4 but cannot sign yet.
+  - It builds with Bazel and Clang and has no version numbers.
+  - The interop gate in Phase 21 depends on it building in CI. If it does
+    not build, it shows as "not installed", the same rule used for
+    c2pa-mcp.
+- The web UI issues the spec lists are real in `web/index.html`:
+  `validation_state` is rendered as given, so an unsigned file shows red
+  "Invalid", and `signingCredential.untrusted` is listed as a failure.
+  The overlap in (b) could not be seen here because no browser is
+  available.
+
+**Conflicts between the spec and CLAUDE.md (need the user)**
+1. Hard rule 7 freezes scope to JPEG/PNG, ES256 and `c2pa.hash.data`,
+   with no remote manifests, soft bindings or BMFF. Part 2 needs all of
+   these. CLAUDE.md must be updated before Phase 18.
+2. Hard rule 9 forbids claiming "zero dependencies", but the spec calls
+   the core "zero-dependency". The core module has three dependencies, so
+   PHASES.md says "the core module's dependencies stay as they are"
+   instead.
+3. PKCS#11 needs CGO (hard rule 1). This is decided in Phase 24.
+4. Commits: the spec says each phase ends with a commit with no
+   attribution lines. Earlier the user said "leave committing to me".
+
+**Open decisions from the spec, still open**
+- Watermark from scratch or wrapped (Phase 29).
+- Manifest store hosting (Phase 30).
+- Licence: the repo is Apache-2.0 today.
+
+**Approved (2026-11-12)**
+- The plan is approved.
+- CLAUDE.md rule 7 now points to PHASES.md (Phases 0–16 plus Part 2) as
+  the agreed scope. Anything else needs the user's approval.
+- The wording is "few dependencies", never "zero".
+- PKCS#11 is deferred and listed under Later. v0.4 covers AWS KMS and
+  GCP KMS only, and CGO stays out entirely.
+- From Phase 18 on, each phase ends with a local commit with no Claude
+  attribution or co-author lines. The user reviews and pushes.
+- Phase 28 (PDF) moved to "Later". v0.5 is WebP plus HEIC/AVIF, with
+  Gate G now after Phase 27.

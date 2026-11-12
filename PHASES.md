@@ -1,6 +1,6 @@
 # C2paSeal — build phases for Claude Code
 
-17 phases, each sized for one Claude Code session. Give Claude Code one phase at a time:
+34 phases (0–33), each sized for one Claude Code session. Phases 17–33 are in Part 2 at the end of this file. Give Claude Code one phase at a time:
 
 > Read CLAUDE.md and PROGRESS.md, then do Phase N from PHASES.md. Stop when its "Done when" checks pass and update PROGRESS.md.
 
@@ -318,3 +318,424 @@ Tasks:
 
 Done when:
 - `go doc` shows examples, README quick start works copy-pasted, release workflow is green.
+
+---
+
+# Part 2 — from v0.1.0 to v1.0 (Phases 17–33)
+
+Source: `PRODUCT_SPEC.md` (Nyasa Parikh, 2026-11-11). Phase 17 checked that
+spec against PROGRESS.md and INTEROP.md; work already done in Phases 0–16
+has been left out of the phases below. Every phase still follows CLAUDE.md.
+Anything that needs a new dependency goes in a separate Go module, and
+only after the user agrees. Each release phase ends with a **STOP — human
+gate**: report the results, then ask before pushing the tag.
+
+| Phase | Name | Release |
+|---|---|---|
+| 17 | Audit and plan | — |
+| 18 | Ingredients and remote manifests | v0.2 |
+| 19 | Legacy manifests, time-stamp follow-ups, CLI batch mode | v0.2 |
+| 20 | Trust lists and revocation | v0.2 |
+| 21 | Hardening, web UI fixes, release | v0.2 — **Gate D** |
+| 22 | WebAssembly build | v0.3 |
+| 23 | Static web app on GitHub Pages | v0.3 — **Gate E** |
+| 24 | Pluggable key providers | v0.4 |
+| 25 | sealsvc signing server | v0.4 — **Gate F** |
+| 26 | WebP | v0.5 |
+| 27 | HEIC/AVIF and the ISO BMFF layer | v0.5 — **Gate G** |
+| 28 | *(moved to Later: PDF)* | — |
+| 29 | Watermark module | v0.6 |
+| 30 | Manifest store and recovery | v0.6 — **Gate H** |
+| 31 | Integrations and docs site | v0.7 — **Gate I** |
+| 32 | MP4/MOV | v1.0 |
+| 33 | Video in web app and server, docs freeze | v1.0 — **Gate J** |
+
+Already done before Phase 17, and therefore not repeated below:
+- PNG signing (Phase 13).
+- Trust anchors, certificate chain and EKU checks (Phase 8).
+- RFC 3161 time-stamps: verified (Phase 9) and written when signing
+  (Phase 12).
+- The local `serve` demo UI (Phase 15).
+- CLI sign, verify, inspect, version and serve, with `--json` and exit
+  codes (Phase 15).
+- Fuzz targets on every current parser: 12 targets, 5 minutes each
+  (Phase 13).
+- The interop matrix with c2patool and c2pa-mcp, run on tags in CI
+  (Phase 14).
+- Negative fixtures, partly: data, assertion and signature flips, an
+  expired certificate, a bad JUMBF length and a truncated APP11 segment.
+- The release pipeline, with cross-compiled `CGO_ENABLED=0` binaries and
+  SHA256SUMS (Phase 16).
+
+---
+
+## Phase 17 — Audit and plan
+
+**Goal:** check the product spec against what already exists, and write
+the plan for the remaining phases.
+
+Tasks:
+- Read PROGRESS.md, PHASES.md and INTEROP.md.
+- Mark the spec items that are already done.
+- Append Phases 18–33 here.
+- Report before writing any code.
+
+Done when:
+- This section exists, and the user has approved the plan.
+
+---
+
+## Phase 18 — Ingredients and remote manifests
+
+**Goal:** re-signing keeps the edit history, and manifests can live
+outside the file.
+
+Tasks:
+- Re-signing a signed file copies its manifest(s) into the new store.
+  It adds a `c2pa.ingredient.v3` assertion with `relationship: parentOf`,
+  hashed URIs to the parent's claim and signature, and `validationResults`.
+  It also adds a `c2pa.opened` action that references the ingredient.
+  Placeholder sizes still come from the builder, so the reserve-and-backfill
+  check is unchanged.
+- An option to keep the current replace behaviour (`--no-history`).
+- Remote manifests:
+  - Write: a sidecar `.c2pa` file plus a URL in XMP `dcterms:provenance`
+    (JPEG APP1, PNG iTXt). The file then carries no embedded store, or
+    both.
+  - Read: parse that URL. Fetching it is opt-in
+    (`VerifyOptions.FetchRemote`, `--fetch-remote`), so `Verify` stays
+    offline by default.
+- Remote-manifest status codes from SPEC.md.
+- Fixtures: chains of two and three signatures, checked against c2patool.
+  Get a remote-manifest fixture from c2patool.
+
+Done when:
+- c2patool shows the ingredient chain of our re-signed files, with no
+  failures beyond `signingCredential.untrusted`.
+- Our verifier agrees with c2patool on the new fixtures.
+- Interop and fuzz are green.
+
+---
+
+## Phase 19 — Legacy manifests, time-stamp follow-ups, CLI batch mode
+
+**Goal:** read older files, and close the gaps left open in Phases 9 and 12.
+
+Tasks:
+- Read claim v1 (`c2pa.claim`, C2PA 1.x). This covers `claim_generator`
+  as a string, `claim_generator_info` as an array and a single
+  `assertions` list. Read-only: we keep signing claim v2.
+- Time-stamps:
+  - Use the CMS `signingTime` signed attribute when it is present.
+  - Report `timeStamp.untrusted` and `timeStamp.malformed` separately;
+    `digitorus/timestamp` merges them into one error today.
+- `c2paseal verify|inspect DIR...` walks folders. It writes one result
+  per file (JSON Lines with `--json`), takes `--recursive`, and exits 1
+  if any file is invalid.
+- Fixtures: 1.x files from the public c2pa-rs test corpus (check their
+  licence), each with c2patool expected output.
+
+Done when:
+- The 1.x fixtures match c2patool.
+- A batch run over `testdata/` matches the per-file results.
+
+---
+
+## Phase 20 — Trust lists and revocation
+
+**Goal:** trust decisions that match c2pa-rs.
+
+Tasks:
+- Load the C2PA trust list (a PEM bundle) together with c2pa-rs's
+  allowed-EKU configuration. Add allowed end-entity certificate lists.
+- Full chain validation: path building with several intermediates, and
+  certificate profile checks against SPEC.md.
+- OCSP:
+  - Check the signer certificate online. This is opt-in, so verifying
+    stays offline by default.
+  - Read stapled OCSP responses (`rVals`) from the COSE unprotected header.
+  - Staple a response when signing, inside the reserved header size.
+- Add the revocation status codes from SPEC.md. Add a test OCSP responder
+  under `internal/`, modelled on `internal/testtsa`.
+
+Done when:
+- Revoked, good and unknown OCSP cases match c2patool.
+- A file signed by a certificate on the official trust list validates as
+  Trusted with that list loaded.
+
+---
+
+## Phase 21 — Hardening, web UI fixes, release v0.2.0
+
+**Goal:** v0.2 meets the spec's quality bar.
+
+Tasks:
+- Complete the negative fixture set: tampered pixels, bad signature,
+  truncated manifest, expired certificate, wrong hash and revoked
+  certificate. Each one must be rejected by C2paSeal and by c2patool.
+- Add fuzz targets for every parser added since Phase 13, and run fuzzing
+  nightly in CI (`schedule:`), with any crashers kept as artefacts.
+- Add Credentio to the interop harness as a third external validator.
+  - First confirm that it builds (Bazel and Clang, Linux in CI) and that
+    it has a CLI or a small driver.
+  - Pin a commit, since it has no version numbers.
+  - If it can't be built, show it as "not installed". Never substitute
+    another tool for it.
+- Bump the GitHub Actions still on Node 20 (`actions/cache`,
+  `actions/upload-artifact`, `actions/download-artifact`) to their
+  Node 24 majors.
+- Web UI fixes on the `serve` page:
+  - **(a)** A file with no C2PA manifest shows a neutral "No Content
+    Credentials" state, not a red "Invalid".
+  - **(b)** The drop zone no longer overlaps the TEST ONLY warning box.
+  - **(c)** `signingCredential.untrusted` shows as an amber warning
+    ("signer not on your trust list"), not a red failure.
+
+  All three are display changes only: library and CLI results do not
+  change.
+- Add CHANGELOG.md, and make release builds reproducible (`-trimpath`,
+  `-buildvcs`). The release notes say how to check this.
+
+Done when:
+- Interop and fuzz are green.
+- The UI fixes are checked in a browser.
+- The release workflow is green for `v0.2.0`.
+
+### STOP — human gate D
+Report: interop matrix (including Credentio or why it is missing), negative
+fixtures, fuzz summary. Ask before pushing `v0.2.0`.
+
+---
+
+## Phase 22 — WebAssembly build
+
+**Goal:** the same core runs in the browser.
+
+Tasks:
+- `cmd/c2paseal-wasm` (`GOOS=js GOARCH=wasm`, `syscall/js` only) with a
+  small JS API: `verify(bytes, opts)` and `sign(bytes, opts)`, both
+  returning JSON in the same shape as the CLI.
+- A size budget for the gzipped `.wasm` file, enforced in CI. Record TinyGo
+  as an option if the standard build is too large.
+- A headless browser test in CI covering verify and sign on a JPEG and a
+  PNG. Ask before adding a browser test tool.
+
+Done when:
+- The browser test passes in CI, and the size budget holds.
+
+---
+
+## Phase 23 — Static web app on GitHub Pages, release v0.3.0
+
+**Goal:** a hosted web app where files never leave the browser.
+
+Tasks:
+- Rebuild the `serve` page as a static site over the WASM build:
+  - Drag-and-drop verify.
+  - A status banner: valid, tampered, untrusted signer, or no Content
+    Credentials. It keeps the Phase 21 UI fixes.
+  - A provenance (ingredient) graph and a raw manifest view.
+  - A "Sign a sample" tab using a clearly labelled demo certificate.
+- The wording follows the spec: "signed by X, unmodified since …", never
+  "real" or "true".
+- `serve` keeps working by embedding the same static site.
+- Deploy to GitHub Pages from CI.
+
+Done when:
+- The site is live on GitHub Pages and works offline after loading.
+- The release workflow is green for `v0.3.0`.
+
+### STOP — human gate E
+Report: site URL, browser check, size. Ask before pushing `v0.3.0`.
+
+---
+
+## Phase 24 — Pluggable key providers
+
+**Goal:** signing keys don't have to sit on disk.
+
+Tasks:
+- A `sign` key-provider interface over `crypto.Signer`, plus key URIs
+  (`file:`, `awskms:`, `gcpkms:`).
+- AWS KMS and GCP KMS each go in their own Go module (`keys/awskms`,
+  `keys/gcpkms`) so the core module's dependencies stay as they are. Ask
+  before adding the SDKs.
+- No PKCS#11 in v0.4: Go bindings need CGO, and CGO stays out entirely
+  (decided 2026-11-12). It is listed under Later.
+- Fake KMS endpoints in tests. A real KMS signs in CI only if the user
+  supplies credentials.
+
+Done when:
+- Files signed through each provider verify in c2patool.
+- The core module's `go.mod` is unchanged.
+
+---
+
+## Phase 25 — sealsvc signing server, release v0.4.0
+
+**Goal:** a self-hosted signing service.
+
+Tasks:
+- A `cmd/sealsvc` REST API with `POST /v1/sign`, `POST /v1/verify`,
+  `GET /healthz` and `GET /metrics` (Prometheus text format written with
+  the standard library).
+- API keys, per-key rate limits, a structured audit log (`log/slog`, JSON)
+  and request size limits.
+- Dockerfile (distroless or scratch, CGO_ENABLED=0), a compose example and
+  an image published to GHCR from the release workflow.
+
+Done when:
+- CI signs through the server using a KMS key or a fake KMS, and verifies
+  the result.
+- The release workflow is green for `v0.4.0`.
+
+### STOP — human gate F
+Report: API, security notes, audit log sample. Ask before pushing `v0.4.0`.
+
+---
+
+## Phase 26 — WebP
+
+**Goal:** sign and verify WebP.
+
+Tasks:
+- `container/webp`: RIFF parser and writer with a `C2PA` chunk,
+  byte-exact round trips and `c2pa.hash.data` exclusions.
+- A fuzz target, oracle fixtures, and new interop rows.
+
+Done when:
+- WebP files pass the same checks as JPEG and PNG, including c2patool.
+
+---
+
+## Phase 27 — HEIC/AVIF and the ISO BMFF layer, release v0.5.0
+
+**Goal:** a reusable BMFF box layer, which Phase 32 needs for video.
+
+Tasks:
+- `container/bmff`: box parser and writer (size64, `uuid` C2PA box,
+  `meta`/`iloc` offset fix-ups) with byte-exact round trips.
+- The `c2pa.hash.bmff.v3` hard binding, for verifying and signing. This
+  is a new binding beyond `c2pa.hash.data`.
+- HEIC and AVIF use it.
+- Fuzz targets, oracle fixtures, and new interop rows.
+
+Done when:
+- HEIC and AVIF files signed by us verify in c2patool.
+- c2patool-signed HEIC and AVIF files verify in our verifier.
+- The release workflow is green for `v0.5.0`.
+
+### STOP — human gate G
+Report: per-format interop for WebP, HEIC and AVIF. Ask before pushing
+`v0.5.0`.
+
+---
+
+## Phase 29 — Watermark module
+
+**Goal:** an invisible watermark that carries a manifest ID.
+
+Tasks:
+- Decide first: write it from scratch, or wrap an open-source watermark
+  (the open decision in the spec).
+- If from scratch: a DWT-DCT embed and extract in a separate module
+  (`watermark/`). Decoding JPEG and PNG uses the standard library; WebP
+  decoding would need `golang.org/x/image`, so ask first.
+- A robustness harness covering JPEG quality 50–95, resizing, cropping
+  and screenshots. Publish the results honestly, failures included.
+
+Done when:
+- The harness runs in CI, and its results are published in the repo.
+
+---
+
+## Phase 30 — Manifest store and recovery, release v0.6.0
+
+**Goal:** recover credentials from copies that have had them stripped.
+
+Tasks:
+- A soft-binding assertion (`c2pa.soft-binding`) in signed files, linking
+  the watermark ID.
+- A manifest store service with lookup by watermark ID. It lives in a
+  separate module, and choosing its database needs the user's approval.
+  Also decide whether it is self-hosted only or has a public instance.
+- "Recover credentials" in the CLI and the web app: extract the watermark,
+  look up the manifest, and verify it against the image.
+
+Done when:
+- The recovery test passes: sign, strip the manifest, re-encode, recover,
+  verify.
+- The release workflow is green for `v0.6.0`.
+
+### STOP — human gate H
+Report: recovery results, robustness table. Ask before pushing `v0.6.0`.
+
+---
+
+## Phase 31 — Integrations and docs site, release v0.7.0
+
+**Goal:** easy adoption.
+
+Tasks:
+- Go HTTP middleware that signs uploads, built on the Phase 24 key
+  providers.
+- A GitHub Action that signs or verifies files in a workflow.
+- A docs site containing:
+  - A quickstart that takes under 5 minutes.
+  - A guide per component.
+  - An honest "what C2PA does and does not prove" page.
+- An examples repository.
+
+Done when:
+- A new user gets through the quickstart in under 5 minutes.
+- The release workflow is green for `v0.7.0`.
+
+### STOP — human gate I
+Report: docs site, Action demo. Ask before pushing `v0.7.0`.
+
+---
+
+## Phase 32 — MP4/MOV
+
+**Goal:** sign and verify video, built on the Phase 27 BMFF layer.
+
+Tasks:
+- MP4 and MOV signing and verification with `c2pa.hash.bmff.v3`,
+  including fragmented MP4 (Merkle-tree hashes over fragments).
+- Fuzz targets, oracle fixtures, and new interop rows.
+
+Done when:
+- Plain and fragmented MP4 signed by us verify in c2patool, and
+  c2patool-signed MP4 files verify in our verifier.
+
+---
+
+## Phase 33 — Video everywhere, docs freeze, release v1.0.0
+
+**Goal:** v1.0.
+
+Tasks:
+- Video in the web app (with size limits) and in sealsvc.
+- A full interop pass across all formats and tools.
+- Freeze the API docs and state the v1 compatibility promise.
+
+Done when:
+- Full interop passes.
+- The release workflow is green for `v1.0.0`.
+
+### STOP — human gate J
+Report: full interop matrix and API review. Ask before pushing `v1.0.0`.
+
+---
+
+## Later — not scheduled
+
+These items were moved out of Part 2 on 2026-11-12. None of them is built
+without the user's approval.
+
+- **PDF (formerly Phase 28).** A minimal PDF reader and writer covering
+  only what C2PA needs: an embedded-file manifest store attached through
+  an incremental update, plus hard-binding exclusions, a fuzz target,
+  oracle fixtures and interop rows.
+- **PKCS#11 HSM keys.** Go bindings need CGO, which hard rule 1 forbids.
+  This would need a pure-Go approach or a rule change.

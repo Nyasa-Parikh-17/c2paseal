@@ -43,7 +43,7 @@ func newFakeTSA(t *testing.T) (*testtsa.TSA, *httptest.Server) {
 // is ErrTimestampTooLarge.
 func TestTimestampHeaderSize(t *testing.T) {
 	for _, reserve := range []int{0, 1, 23, 24, 255, 256, 300, DefaultTimestampReserve, MaxTimestampReserve} {
-		size, err := tstHeaderSize(reserve)
+		size, err := tstHeaderSize(reserve, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestTimestampHeaderSize(t *testing.T) {
 			if n < 0 || n > reserve {
 				continue
 			}
-			h, err := tstHeader(make([]byte, n), size)
+			h, err := tstHeader(make([]byte, n), size, nil)
 			if err != nil {
 				t.Fatalf("reserve %d, token %d: %v", reserve, n, err)
 			}
@@ -60,11 +60,11 @@ func TestTimestampHeaderSize(t *testing.T) {
 				t.Fatalf("reserve %d, token %d: header %d bytes, want %d", reserve, n, len(b), size)
 			}
 		}
-		if _, err := tstHeader(make([]byte, reserve+1), size); !errors.Is(err, ErrTimestampTooLarge) {
+		if _, err := tstHeader(make([]byte, reserve+1), size, nil); !errors.Is(err, ErrTimestampTooLarge) {
 			t.Errorf("reserve %d: token of reserve+1 bytes: err = %v, want ErrTimestampTooLarge", reserve, err)
 		}
 	}
-	if h, err := tstHeader(nil, 0); err != nil || len(h) != 0 {
+	if h, err := tstHeader(nil, 0, nil); err != nil || len(h) != 0 {
 		t.Errorf("no time-stamp: header %v, %v; want empty", h, err)
 	}
 }

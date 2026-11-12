@@ -26,7 +26,7 @@ import (
 	"strings"
 )
 
-var dirs = []string{"unsigned", "signed", "broken", "samples", "remote", "legacy"}
+var dirs = []string{"unsigned", "signed", "broken", "samples", "remote", "legacy", "ocsp"}
 
 func main() {
 	if len(os.Args) < 2 {

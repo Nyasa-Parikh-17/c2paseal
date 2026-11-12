@@ -24,39 +24,38 @@ func hardBinding(m *manifest.Manifest, file []byte) []Status {
 	var out []Status
 	claimURL := ManifestURL(m.Label)
 	if len(bindings) == 0 {
-		out = append(out, Status{ClaimHardBindingsMissing, claimURL, "claim missing data binding"})
+		out = append(out, Status{Code: ClaimHardBindingsMissing, URL: claimURL, Explanation: "claim missing data binding"})
 	}
 	if len(bindings) > 1 {
-		out = append(out, Status{AssertionMultipleHardBinding, claimURL, "claim has multiple data bindings"})
+		out = append(out, Status{Code: AssertionMultipleHardBinding, URL: claimURL, Explanation: "claim has multiple data bindings"})
 	}
 
 	for _, a := range bindings {
 		url := assertionURL(m.Label, a.Label)
 		if assertion.BaseLabel(a.Label) != assertion.LabelDataHash {
 			// BMFF, boxes and collection hashes are out of scope.
-			out = append(out, Status{GeneralError, url, "unsupported hard binding: " + a.Label})
+			out = append(out, Status{Code: GeneralError, URL: url, Explanation: "unsupported hard binding: " + a.Label})
 			continue
 		}
 		dh, ok := a.Value.(*assertion.DataHash)
 		if !ok {
-			out = append(out, Status{AssertionDataHashMalformed, url, "data hash could not be parsed"})
+			out = append(out, Status{Code: AssertionDataHashMalformed, URL: url, Explanation: "data hash could not be parsed"})
 			continue
 		}
 		if len(dh.Exclusions) > 1 {
-			out = append(out, Status{AssertionDataHashExtra, url, "extra data hash exclusions found"})
+			out = append(out, Status{Code: AssertionDataHashExtra, URL: url, Explanation: "extra data hash exclusions found"})
 		}
 		if dh.URL != "" {
-			out = append(out, Status{AssertionDataHashMismatch, a.Label, "remote data hash URIs are not supported"})
+			out = append(out, Status{Code: AssertionDataHashMismatch, URL: a.Label, Explanation: "remote data hash URIs are not supported"})
 			continue
 		}
 		name := cmp.Or(dh.Name, "unnamed")
 		alg := cmp.Or(dh.Alg, m.Claim.Alg, manifest.DefaultAlg)
 		if err := checkDataHash(file, alg, dh); err != nil {
-			out = append(out, Status{AssertionDataHashMismatch, url,
-				fmt.Sprintf("asset hash error, name: %s, error: hash verification( %s )", name, err)})
+			out = append(out, Status{Code: AssertionDataHashMismatch, URL: url, Explanation: fmt.Sprintf("asset hash error, name: %s, error: hash verification( %s )", name, err)})
 			continue
 		}
-		out = append(out, Status{AssertionDataHashMatch, url, "data hash valid"})
+		out = append(out, Status{Code: AssertionDataHashMatch, URL: url, Explanation: "data hash valid"})
 	}
 	return out
 }

@@ -31,6 +31,8 @@ const (
 const (
 	HeaderSigTst  = "sigTst"
 	HeaderSigTst2 = "sigTst2"
+	// HeaderRVals holds revocation values: {"ocspVals": [DER responses]}.
+	HeaderRVals = "rVals"
 )
 
 // ErrMalformed wraps every decode error.
@@ -48,6 +50,9 @@ type Sign1 struct {
 	Alg        int64    // from the protected header
 	X5Chain    [][]byte // DER certificates, signer first
 	Timestamps []Timestamp
+	// OCSP holds the stapled DER OCSP responses from the unprotected
+	// header (rVals.ocspVals, C2PA 2.4 §10.3.2.6), if any.
+	OCSP [][]byte
 }
 
 // Timestamp is an RFC 3161 time-stamp token from the unprotected header.
@@ -128,6 +133,17 @@ func Decode(b []byte) (*Sign1, error) {
 	}
 	if len(s.X5Chain) == 0 {
 		return fail("empty x5chain")
+	}
+
+	// Stapled OCSP responses; c2pa-rs ignores a malformed rVals.
+	if rv, ok := lookup(s.Unprotected, HeaderRVals).(map[string]any); ok {
+		if vals, ok := rv["ocspVals"].([]any); ok {
+			for _, v := range vals {
+				if b, ok := v.([]byte); ok {
+					s.OCSP = append(s.OCSP, b)
+				}
+			}
+		}
 	}
 
 	for _, h := range []struct {

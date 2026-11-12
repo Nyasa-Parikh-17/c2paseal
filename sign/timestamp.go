@@ -57,16 +57,19 @@ var (
 	ErrTimestampTooLarge = errors.New("sign: time-stamp token larger than the reserved slot")
 )
 
-// tstHeader returns the unprotected header holding token, padded so that it
-// encodes to exactly size bytes. size 0 means no time-stamp (empty header).
-func tstHeader(token []byte, size int) (map[any]any, error) {
+// tstHeader returns the unprotected header holding token and the extra
+// entries (a stapled OCSP response), padded so that it encodes to exactly
+// size bytes. size 0 means no time-stamp: only the extra entries.
+func tstHeader(token []byte, size int, extra map[any]any) (map[any]any, error) {
+	h := map[any]any{}
+	for k, v := range extra {
+		h[k] = v
+	}
 	if size == 0 {
-		return map[any]any{}, nil
+		return h, nil
 	}
-	h := map[any]any{
-		"sigTst2": map[string]any{"tstTokens": []any{map[string]any{"val": token}}},
-		"pad":     make([]byte, minPad),
-	}
+	h["sigTst2"] = map[string]any{"tstTokens": []any{map[string]any{"val": token}}}
+	h["pad"] = make([]byte, minPad)
 	b, err := cbormode.Enc.Marshal(h)
 	if err != nil {
 		return nil, fmt.Errorf("sign: encode time-stamp header: %w", err)
@@ -89,12 +92,16 @@ func tstHeader(token []byte, size int) (map[any]any, error) {
 }
 
 // tstHeaderSize is the reserved unprotected header size for tokens of up to
-// reserve bytes.
-func tstHeaderSize(reserve int) (int, error) {
-	b, err := cbormode.Enc.Marshal(map[any]any{
+// reserve bytes, with the extra entries.
+func tstHeaderSize(reserve int, extra map[any]any) (int, error) {
+	h := map[any]any{
 		"sigTst2": map[string]any{"tstTokens": []any{map[string]any{"val": make([]byte, reserve)}}},
 		"pad":     make([]byte, minPad),
-	})
+	}
+	for k, v := range extra {
+		h[k] = v
+	}
+	b, err := cbormode.Enc.Marshal(h)
 	if err != nil {
 		return 0, fmt.Errorf("sign: encode time-stamp header: %w", err)
 	}

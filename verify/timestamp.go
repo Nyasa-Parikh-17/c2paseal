@@ -44,7 +44,7 @@ func checkStamp(m *manifest.Manifest, opts *Options, checkTrust bool) (out []Sta
 		return nil, nil, nil
 	}
 	url := SignatureURL(m)
-	add := func(code, why string) { out = append(out, Status{code, url, why}) }
+	add := func(code, why string) { out = append(out, Status{Code: code, URL: url, Explanation: why}) }
 
 	// Only the first time-stamp header is used: sigTst2 if present, else sigTst.
 	version := s.Timestamps[0].Version

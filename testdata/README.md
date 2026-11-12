@@ -109,3 +109,18 @@ Written by c2patool 0.27.21 with the TEST ONLY PKI and `"claim_version": 1`:
 
 `cloud.jpg` from the same corpus was left out: its store is only at an Adobe
 URL, so its oracle output would depend on that server.
+
+## ocsp/
+
+`small.jpg` signed by C2paSeal with each OCSP test signer (`pki/ocsp/`),
+with the TEST ONLY responder's answer stapled in the COSE unprotected header
+(`rVals`). c2pa-rs reads stapled responses but does not write them, so
+c2patool is the oracle, not the signer. Made by `scripts/make-ocsp-fixtures.sh`.
+The responder chains to the test root, so the responses count only in the
+trusted mode.
+
+| File | Stapled answer | Default oracle | Trusted oracle |
+|---|---|---|---|
+| `good.jpg` | good | Valid (response ignored) | Trusted, `signingCredential.ocsp.notRevoked` (informational) |
+| `revoked.jpg` | revoked | Valid (response ignored) | c2patool error: the certificate is not trusted |
+| `unknown.jpg` | unknown | Valid (response ignored) | Trusted (an unknown stapled answer is not reported) |

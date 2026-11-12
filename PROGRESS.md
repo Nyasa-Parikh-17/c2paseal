@@ -15,8 +15,9 @@ Scope-creep ideas go here instead of being built.
   shown by `inspect`, not checked.
 - Strict v1 validation (c2pa-rs `strict_v1_validation`, off by default): the
   full actions rules on v1 claims.
-- OCSP / revocation; allowed end-entity lists; BMFF, boxes and collection
-  hard bindings.
+- Revocation beyond the signer's OCSP: CRLs, OCSP for time-stamp
+  authorities, the `c2pa.certificate-status` assertion; BMFF, boxes and
+  collection hard bindings.
 - Remote manifests: HTTP `Link: rel=c2pa-manifest` discovery (§15.5.3.2);
   extended XMP for packets over 64 KB in JPEG; re-signing a file whose
   only store is a sidecar or remote one (today the parent must be embedded).
@@ -1072,3 +1073,97 @@ standard library; signing stays ES256. SPEC.md and README updated.
 **Open issues**
 - c2pa-rs sets `signature.time` from a passthrough trust policy; we take
   the time of any token valid for the signature. They agree on the corpus.
+
+### Phase 20 — Trust lists and revocation (2026-11-13)
+
+**Built**
+- Trust configuration (`verify.Options`), each as c2pa-rs's
+  CertificateTrustPolicy:
+  - `AllowedList`: SHA-256 of end-entity certificates trusted as they are,
+    checked before any chain and also without anchors; reported as "found in
+    EndEntity trust anchors". Applies to signers, TSAs and OCSP responders.
+  - `ExtraEKUs`: accepted for claim signers on top of the defaults.
+  - Loaders: `LoadTrustList` (PEM bundles such as the official
+    `C2PA-TRUST-LIST.pem` and `C2PA-TSA-TRUST-LIST.pem`, now in
+    `testdata/trust/`, CC BY 4.0), `LoadAllowedList` (PEM certificates or
+    44-character base64 hashes outside PEM blocks, as c2pa-rs reads them),
+    `LoadTrustConfig` (one OID per line).
+  - CLI `verify`: `--trust` repeatable, `--allowed-list`, `--trust-config`.
+- Chains: Go's path building already handles several intermediates in any
+  order; now checked against c2patool (in order, out of order, middle
+  missing, a `pathlen:0` intermediate exceeded).
+- OCSP (`internal/ocsp`, standard library only): parse responses and
+  requests, verify the response signature with the first embedded
+  certificate (as c2pa-rs), match CertIDs, build requests, fetch with GET
+  `<url>/<base64 request>` (as c2pa-rs), and write responses (for the test
+  responder). openssl verifies our responses (`Response verify OK`).
+- `cose.Decode` reads stapled responses from `rVals.ocspVals`.
+- Verifying (`verify/ocsp.go`), in c2pa-rs order (after the signature
+  reference checks, before the time-stamp and credential checks):
+  - stapled: used only if the responder is a valid OCSP signer that is
+    trusted (anchors or allowed list); good → informational
+    `signingCredential.ocsp.notRevoked`; revoked → c2pa-rs returns an error
+    that ends all validation (c2patool prints only "the certificate is not
+    trusted"), so `File` reports `signingCredential.ocsp.revoked` as its one
+    failure, for the active manifest or an ingredient; unknown → nothing;
+  - fetched (`Options.FetchOCSP`, off by default; CLI `--fetch-ocsp`):
+    success `notRevoked`, failure `revoked` / `unknown`, informational
+    `inaccessible`, with c2pa-rs's URL `OCSP_RESPONSE` and its time rules
+    (thisUpdate/nextUpdate, revocation time against a trusted time-stamp,
+    removeFromCRL).
+  - c2pa-rs logs the same code with different kinds on the two paths and
+    c2patool groups by kind, so `Status` gained an unexported kind
+    override; all `Status` literals became keyed (`gofmt -r`).
+- Signing: `Options.OCSPResponse` (given) or `FetchOCSP` (from the signer's
+  AIA responder) staples `rVals` in the unprotected header. The response is
+  known before sizing, so it is part of the placeholder and the reserve
+  check is unchanged; with a TSA the padded slot includes it. The response
+  must parse, be successful, verify and answer for the signer
+  (`ErrBadOCSP`); its status is stored as given. CLI `sign --ocsp` /
+  `--ocsp-response`, and `ocsp_stapled` in the JSON output.
+- Test PKI: `scripts/genocsppki` adds `testdata/pki/ocsp/` (responder and
+  good / revoked / unknown signers with AIA `http://127.0.0.1:8766/`) under
+  the existing intermediate; other keys untouched. `internal/testocsp` is
+  the responder (GET and POST), `scripts/ocspd` serves it with a lifetime.
+- Fixtures: c2pa-rs reads stapled responses but never writes them, so
+  `scripts/make-ocsp-fixtures.sh` signs `testdata/ocsp/{good,revoked,
+  unknown}.jpg` with C2paSeal and c2patool is the oracle. `fixtures.OCSP`;
+  its corpus time is 2026-11-20 because the signers were issued this month.
+- Report: an empty byte string prints as `[]`, as c2patool does (our own
+  signer writes an empty `pad`; these are the first oracle fixtures it made).
+- Interop: the OCSP files are in INTEROP.md; container facts show the
+  stapled answer (also Adobe's real one in `legacy/ocsp.jpg`); one new
+  cause: for `ocsp/revoked.jpg` in trusted mode c2patool refuses the file
+  and c2pa-mcp, which does not read stapled responses, finds it Trusted.
+
+**Results**
+- Revoked, good and unknown match c2patool, kind by kind, URL and state:
+  stapled, through the corpus oracle in both trust modes (TestCorpus,
+  TestOracle), and fetched from the test responder with c2patool's
+  `verify.ocsp_fetch` on (TestC2patoolOCSP: all six cases).
+- Allowed list (PEM and hash forms) and trust config match c2patool's
+  `--allowed_list` / `--trust_config` (TestC2patoolTrustOptions); chains
+  match (TestC2patoolChains).
+- INTEROP.md: 67 files × 2 modes, 0 unexplained.
+- gofmt, build, vet, staticcheck and the full suite are clean. Coverage:
+  verify 90.7%, internal/ocsp 77.9%, sign 87.4%, cmd/c2paseal 91.5%,
+  root 81.5%.
+- Fuzzing, 2 minutes each, no crashers: `FuzzParseResponse` (399k execs),
+  `FuzzFile` (6.6k).
+
+**Not done: "a file signed by a certificate on the official trust list
+validates as Trusted with that list loaded."** The lists load, but no
+publicly licensed JPEG or PNG signed under the conformance program was
+found. Checked against the official list with c2patool: `legacy/ocsp.jpg`
+(Adobe, 2025), c2pa-c `for_trusted_read.jpg` (c2pa-rs test PKI), c2pa-rs
+`adobe_connected_identities.jpg` (Adobe stage) and c2pa-js
+`PirateShip_save_credentials_to_cloud.jpg` (Adobe Photoshop, 2026): all
+`signingCredential.untrusted` for c2patool too (their TSAs are on the TSA
+list). A photo from a conforming product (for example a Pixel 10 or
+Galaxy S25 camera image) that may be redistributed would close this; it
+needs the user.
+
+**Open issues**
+- The fetch path checks the responder's profile but, like c2pa-rs, not its
+  trust; it does not log the profile failure c2pa-rs would log for a bad
+  responder certificate.

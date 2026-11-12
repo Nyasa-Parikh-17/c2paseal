@@ -93,15 +93,24 @@ const labelCredentials = "c2pa.credentials"
 
 // hashesAsBase64 renders the hash of each hashed-URI map ({"url", "hash"})
 // as base64, as c2patool does where a file stores it as an array of
-// integers (older c2pa-rs, and JSON assertions).
+// integers (older c2pa-rs, and JSON assertions). It also renders an empty
+// byte string as [] rather than "", as c2patool does (an empty pad).
 func hashesAsBase64(v any) any {
 	switch x := v.(type) {
+	case []byte:
+		if len(x) == 0 {
+			return []any{}
+		}
 	case map[string]any:
 		if _, ok := x["url"].(string); ok {
 			if b, ok := byteArray(x["hash"]); ok {
 				x["hash"] = base64.StdEncoding.EncodeToString(b)
 			}
 		}
+		for k, e := range x {
+			x[k] = hashesAsBase64(e)
+		}
+	case map[any]any:
 		for k, e := range x {
 			x[k] = hashesAsBase64(e)
 		}

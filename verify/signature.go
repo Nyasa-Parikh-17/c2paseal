@@ -1,11 +1,13 @@
 package verify
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"math/big"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +23,22 @@ type Options struct {
 	// but untrusted chain gives signingCredential.untrusted, not a total
 	// failure. Time-stamp authorities are checked against the same anchors.
 	TrustAnchors []*x509.Certificate
+
+	// AllowedList holds the SHA-256 hashes of end-entity certificates that
+	// are trusted as they are, whatever their chain (c2pa-rs's allowed
+	// list; see c2paseal.LoadAllowedList). It applies to claim signers,
+	// time-stamp authorities and OCSP responders.
+	AllowedList [][sha256.Size]byte
+
+	// ExtraEKUs are accepted for claim signers in addition to the C2PA
+	// defaults (c2pa-rs's trust configuration; see
+	// c2paseal.LoadTrustConfig).
+	ExtraEKUs []asn1.ObjectIdentifier
+
+	// FetchOCSP checks the signer certificate with its OCSP responder when
+	// the signature has no stapled response (c2pa-rs verify.ocsp_fetch).
+	// Off by default, so verifying stays offline. HTTPClient is used.
+	FetchOCSP bool
 
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
@@ -66,11 +84,11 @@ func Signature(m *manifest.Manifest, signingTime *time.Time, opts *Options) []St
 func refChecks(m *manifest.Manifest) []Status {
 	var out []Status
 	if !signatureRefOK(m) {
-		out = append(out, Status{ClaimSignatureMissing, SignatureURL(m), "signature missing"})
+		out = append(out, Status{Code: ClaimSignatureMissing, URL: SignatureURL(m), Explanation: "signature missing"})
 	}
 	// Only v2 claims need a urn:c2pa: label; 1.x used urn:uuid:.
 	if m.Claim.Version != 1 && !manifestLabel.MatchString(m.Label) {
-		out = append(out, Status{ClaimMalformed, ManifestURL(m.Label), "claim box label invalid"})
+		out = append(out, Status{Code: ClaimMalformed, URL: ManifestURL(m.Label), Explanation: "claim box label invalid"})
 	}
 	return out
 }
@@ -82,7 +100,7 @@ func refChecks(m *manifest.Manifest) []Status {
 func credentials(m *manifest.Manifest, signingTime *time.Time, opts *Options) []Status {
 	url := SignatureURL(m)
 	var out []Status
-	add := func(code, why string) { out = append(out, Status{code, url, why}) }
+	add := func(code, why string) { out = append(out, Status{Code: code, URL: url, Explanation: why}) }
 	mismatch := func() []Status {
 		add(ClaimSignatureMismatch, "claim signature is not valid")
 		return out
@@ -119,11 +137,11 @@ func credentials(m *manifest.Manifest, signingTime *time.Time, opts *Options) []
 	if signingTime != nil {
 		at = *signingTime
 	}
-	if code, why := checkProfile(leaf, at, signerEKUs); code != "" {
+	if code, why := checkProfile(leaf, at, signerEKUsFor(opts)); code != "" {
 		add(code, why)
 	}
-	if trusted(leaf, chain, signingTime, opts) {
-		add(SigningCredentialTrusted, "signing certificate trusted, found in System trust anchors")
+	if where, ok := trustedBy(leaf, chain, signingTime, opts); ok {
+		add(SigningCredentialTrusted, "signing certificate trusted, found in "+where+" trust anchors")
 	} else {
 		add(SigningCredentialUntrusted, "signing certificate untrusted")
 	}
@@ -164,6 +182,34 @@ func isDERSignature(sig []byte) bool {
 // validity, so the chain is tried at each certificate's notBefore and
 // notAfter and accepted if it verifies at any of them.
 func trusted(leaf *x509.Certificate, chain []*x509.Certificate, signingTime *time.Time, opts *Options) bool {
+	_, ok := trustedBy(leaf, chain, signingTime, opts)
+	return ok
+}
+
+// trustedBy is trusted that also says how, in c2pa-rs's words: "EndEntity"
+// for a certificate on the allowed list, "System" for a chain to an anchor.
+func trustedBy(leaf *x509.Certificate, chain []*x509.Certificate, signingTime *time.Time, opts *Options) (string, bool) {
+	if opts != nil && slices.Contains(opts.AllowedList, sha256.Sum256(leaf.Raw)) {
+		return "EndEntity", true
+	}
+	if chainTrusted(leaf, chain, signingTime, opts) {
+		return "System", true
+	}
+	return "", false
+}
+
+// signerEKUsFor is the EKUs accepted for claim signers: the C2PA defaults
+// plus the trust configuration's.
+func signerEKUsFor(opts *Options) []asn1.ObjectIdentifier {
+	if opts == nil || len(opts.ExtraEKUs) == 0 {
+		return signerEKUs
+	}
+	return append(slices.Clone(signerEKUs), opts.ExtraEKUs...)
+}
+
+// chainTrusted builds a path from leaf through the intermediates to an
+// anchor (see trusted).
+func chainTrusted(leaf *x509.Certificate, chain []*x509.Certificate, signingTime *time.Time, opts *Options) bool {
 	if opts == nil || len(opts.TrustAnchors) == 0 {
 		return false
 	}

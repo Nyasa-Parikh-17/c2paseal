@@ -237,6 +237,12 @@ func checkAssertions(t *testing.T, m *Manifest, want map[string]json.RawMessage)
 			if err := json.Unmarshal(want[a.Label], &w); err != nil {
 				t.Fatal(err)
 			}
+			// c2patool prints an empty byte string (an empty pad) as [].
+			if wm, ok := w.(map[string]any); ok {
+				if l, ok := wm["pad"].([]any); ok && len(l) == 0 {
+					wm["pad"] = ""
+				}
+			}
 			if got := normalize(t, v); !reflect.DeepEqual(got, w) {
 				t.Errorf("%s: %s =\n %v\noracle\n %v", m.Label, a.Label, got, w)
 			}

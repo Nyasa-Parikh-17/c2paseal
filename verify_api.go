@@ -1,11 +1,16 @@
 package c2paseal
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/asn1"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
@@ -93,4 +98,80 @@ func LoadTrustAnchors(path string) ([]*x509.Certificate, error) {
 		return nil, errors.New("c2paseal: trust anchors: no PEM certificates in " + path)
 	}
 	return out, nil
+}
+
+// LoadTrustList reads a C2PA trust list, a PEM bundle of trust anchors such
+// as the official C2PA-TRUST-LIST.pem and C2PA-TSA-TRUST-LIST.pem from
+// github.com/c2pa-org/conformance-public. Several lists can be loaded and
+// appended to VerifyOptions.TrustAnchors; time-stamp authorities are
+// checked against the same anchors, as in c2pa-rs.
+func LoadTrustList(path string) ([]*x509.Certificate, error) { return LoadTrustAnchors(path) }
+
+// LoadAllowedList reads an allowed list for VerifyOptions.AllowedList, in
+// c2pa-rs's format: PEM certificates, and lines outside PEM blocks that are
+// the base64 SHA-256 of a certificate's DER (44 characters). Other lines are
+// ignored.
+func LoadAllowedList(path string) ([][sha256.Size]byte, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: allowed list: %w", err)
+	}
+	var out [][sha256.Size]byte
+	inside := false
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.Contains(line, "-----BEGIN"):
+			inside = true
+		case strings.Contains(line, "-----END"):
+			inside = false
+		case !inside && len(line) == 44:
+			if h, err := base64.StdEncoding.DecodeString(line); err == nil && len(h) == sha256.Size {
+				out = append(out, [sha256.Size]byte(h))
+			}
+		}
+	}
+	for blk, rest := pem.Decode(b); blk != nil; blk, rest = pem.Decode(rest) {
+		if blk.Type == "CERTIFICATE" {
+			out = append(out, sha256.Sum256(blk.Bytes))
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("c2paseal: allowed list: no certificates or hashes in " + path)
+	}
+	return out, nil
+}
+
+// LoadTrustConfig reads a trust configuration for VerifyOptions.ExtraEKUs:
+// one EKU object identifier per line (as in c2pa-rs's valid_eku_oids.cfg);
+// lines that are not OIDs, such as comments, are ignored.
+func LoadTrustConfig(path string) ([]asn1.ObjectIdentifier, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: trust config: %w", err)
+	}
+	var out []asn1.ObjectIdentifier
+	for _, line := range strings.Split(string(b), "\n") {
+		if oid, ok := parseOID(strings.TrimSpace(line)); ok {
+			out = append(out, oid)
+		}
+	}
+	return out, nil
+}
+
+// parseOID parses dotted decimal with at least two arcs.
+func parseOID(s string) (asn1.ObjectIdentifier, bool) {
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 {
+		return nil, false
+	}
+	oid := make(asn1.ObjectIdentifier, len(parts))
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 || p == "" || (len(p) > 1 && p[0] == '0') {
+			return nil, false
+		}
+		oid[i] = n
+	}
+	return oid, oid[0] <= 2
 }

@@ -34,11 +34,11 @@ func external(b []byte, opts *Options) (*jumbf.Box, *Status) {
 		return nil, &Status{Code: ClaimMissing, Explanation: "could not find active manifest"}
 	}
 	if opts == nil || !opts.FetchRemote {
-		return nil, &Status{ManifestInaccessible, url, "remote manifest not fetched: remote fetching is off"}
+		return nil, &Status{Code: ManifestInaccessible, URL: url, Explanation: "remote manifest not fetched: remote fetching is off"}
 	}
 	store, err := fetch(opts, url)
 	if err != nil {
-		return nil, &Status{ManifestInaccessible, url, "remote manifest could not be fetched: " + err.Error()}
+		return nil, &Status{Code: ManifestInaccessible, URL: url, Explanation: "remote manifest could not be fetched: " + err.Error()}
 	}
 	return parseExternal(store, url)
 }
@@ -46,7 +46,7 @@ func external(b []byte, opts *Options) (*jumbf.Box, *Status) {
 func parseExternal(store []byte, url string) (*jumbf.Box, *Status) {
 	root, err := jumbf.Parse(store)
 	if err != nil {
-		return nil, &Status{ClaimMalformed, url, "manifest store could not be parsed: " + err.Error()}
+		return nil, &Status{Code: ClaimMalformed, URL: url, Explanation: "manifest store could not be parsed: " + err.Error()}
 	}
 	return root, nil
 }

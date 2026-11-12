@@ -103,7 +103,25 @@ type Status struct {
 	Code        string `json:"code"`
 	URL         string `json:"url,omitempty"`
 	Explanation string `json:"explanation,omitempty"`
+
+	// level overrides KindOf(Code) when set (level-1 is the Kind): c2pa-rs
+	// logs a few codes with different kinds on different paths (the OCSP
+	// codes are informational when stapled, success or failure when
+	// fetched), and c2patool groups statuses by how they were logged.
+	level int
 }
 
-// Kind returns the status code's class.
-func (s Status) Kind() Kind { return KindOf(s.Code) }
+// Kind returns the status's class: by its code, unless it was logged with
+// another kind.
+func (s Status) Kind() Kind {
+	if s.level > 0 {
+		return Kind(s.level - 1)
+	}
+	return KindOf(s.Code)
+}
+
+// withKind returns s logged as kind k.
+func (s Status) withKind(k Kind) Status {
+	s.level = int(k) + 1
+	return s
+}

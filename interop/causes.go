@@ -168,6 +168,20 @@ var causes = []struct {
 			"time-stamp status is in C2PA 2.4; c2pa-mcp logs it as a failure. The file is Invalid for every tool because of the signature."},
 	},
 	{
+		// Signer revoked by a stapled OCSP response.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			return failSet(seal, verify.SigningCredentialRevoked) && strings.Contains(tool.Err, "the certificate is not trusted") &&
+				(mcp.Skipped || (mcp.State == "Trusted" && slices.Contains(mcp.Info, "signingCredential.revocation.unknown")))
+		},
+		cause: cause{"no oracle: c2patool refuses the file", "The signature staples an OCSP response (COSE unprotected header `rVals.ocspVals`) from the TEST ONLY responder, " +
+			"saying the signer certificate is revoked (container facts). In trusted mode the responder chains to the test root, so the response counts. " +
+			"c2pa-rs then logs `signingCredential.ocsp.revoked` and returns an error that ends the whole validation, so c2patool prints " +
+			"`the certificate is not trusted` and no statuses. C2paSeal does the same check and, since c2patool reads nothing, reports that code as its one " +
+			"failure (CLAUDE.md rule 3). c2pa-mcp does not read stapled responses (`signingCredential.revocation.unknown`) and finds the file Trusted. " +
+			"In default mode the responder is not trusted, the response is ignored by both C2paSeal and c2patool, and the tools agree."},
+	},
+	{
 		// Prerelease (pre-1.0) manifests.
 		match: func(r *row, m mode) bool {
 			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)

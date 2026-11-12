@@ -10,3 +10,14 @@ only to sign test fixtures and must never be trusted for anything else.
 | `leaf.pem` / `leaf.key` | ES256 claim signer, valid 5 years from generation |
 | `expired.pem` / `.key` | ES256 claim signer, valid only 2020-01-01 to 2021-01-01 |
 | `leaf-chain.pem`, `expired-chain.pem` | Signer + intermediate, as passed to `c2patool` |
+
+## ocsp/
+
+Added by `scripts/genocsppki` (Go), signed by the same test intermediate;
+the other keys are untouched. Re-running it makes new keys and serials, so
+run `scripts/make-ocsp-fixtures.sh` afterwards.
+
+| File | What |
+|---|---|
+| `responder.pem` / `.key` | OCSP signer (id-kp-OCSPSigning) for `internal/testocsp` |
+| `good.pem`, `revoked.pem`, `unknown.pem` (+ `.key`, `-chain.pem`) | ES256 claim signers whose AIA names the responder at `http://127.0.0.1:8766/`; it answers good, revoked and unknown for them |

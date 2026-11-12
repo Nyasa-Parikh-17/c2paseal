@@ -104,8 +104,14 @@ func File(b []byte, opts *Options) *Result {
 	}
 	active := ms[len(ms)-1]
 	r := &Result{ActiveManifest: referencedManifests(ms, active)}
-	r.ActiveManifest = append(r.ActiveManifest, checkClaim(active, opts)...)
-	r.IngredientDeltas = ingredients(ms, active, opts)
+	statuses, abort := checkClaimAbort(active, opts)
+	if abort != nil {
+		return &Result{ActiveManifest: []Status{*abort}}
+	}
+	r.ActiveManifest = append(r.ActiveManifest, statuses...)
+	if r.IngredientDeltas, abort = ingredients(ms, active, opts); abort != nil {
+		return &Result{ActiveManifest: []Status{*abort}}
+	}
 	r.ActiveManifest = append(r.ActiveManifest, hardBinding(active, b)...)
 	return r
 }

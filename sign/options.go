@@ -83,6 +83,18 @@ type Options struct {
 	// space is in the file whatever the real token's size.
 	TimestampReserve int
 
+	// OCSPResponse is a DER OCSP response for the signing certificate, to
+	// staple in the COSE unprotected header (rVals) so validators can see
+	// its revocation status offline. FetchOCSP fetches one instead from the
+	// certificate's OCSP responder at signing time (needs the network and
+	// the issuer in Chain). The response's size is known before the
+	// manifest is sized, so it needs no reserve.
+	OCSPResponse []byte
+	FetchOCSP    bool
+	// OCSPClient fetches the OCSP response; nil means an http.Client with
+	// a 30-second timeout.
+	OCSPClient *http.Client
+
 	// Rand supplies randomness for salts and UUIDs; nil means crypto/rand.
 	// Signatures always use crypto/rand.
 	Rand io.Reader

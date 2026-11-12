@@ -25,7 +25,8 @@ Related standards: JUMBF (ISO/IEC 19566-5), JPEG XT boxes in APP11
 | Assertions | `c2pa.actions` (v2), `c2pa.hash.data`, `c2pa.ingredient` (v1–v3), `stds.schema-org.CreativeWork`, `c2pa.thumbnail.claim.jpeg`; others read as raw CBOR |
 | Ingredients | Validated recursively (hash, claim, signature), with deltas against the recorded results. Written when re-signing: the parent's manifests are kept byte for byte and the new manifest adds `c2pa.ingredient.v3` (`parentOf`, `activeManifest`, `claimSignature`, `validationResults`) plus a `c2pa.opened` action (§18.15) |
 | Manifest location | Embedded; or outside the file (§11.4, §11.5, §15.5.3): a `.c2pa` sidecar next to the asset, or a remote store referenced by XMP `dcterms:provenance` (JPEG APP1, PNG `iTXt`), served as `application/c2pa`. An unfetched or unreachable remote store gives `manifest.inaccessible`. Fetching is opt-in |
-| Certificates | X.509 chain from `x5chain`, key usage and C2PA EKU checks, configurable trust anchors |
+| Certificates | X.509 chain from `x5chain` (path building through any number of intermediates, in any order), key usage and C2PA EKU checks. Trust: anchors from PEM bundles such as the official C2PA trust lists (`C2PA-TRUST-LIST.pem`, `C2PA-TSA-TRUST-LIST.pem`), c2pa-rs's allowed list of end-entity certificates (PEM or base64 SHA-256) and its trust configuration of extra EKUs |
+| Revocation | OCSP (RFC 6960, own reader on the standard library): stapled responses in the COSE unprotected header (`rVals.ocspVals`) are read and, when their responder is a trusted OCSP signer, give `signingCredential.ocsp.notRevoked` or `signingCredential.ocsp.revoked` (which ends validation, as in c2pa-rs); an online check of the signer is opt-in (`signingCredential.ocsp.notRevoked`, `.revoked`, `.unknown`, `.inaccessible`). Signing can staple a response, given or fetched |
 | Time-stamps | RFC 3161 token in the COSE unprotected header (read and sign). Verified with our own CMS reader (`verify/tst.go`): the CMS `signingTime` attribute is used when present, an unreadable token gives `timeStamp.malformed` and a CMS signature that does not verify `timeStamp.untrusted`, in c2pa-rs order |
 | Operations | Read, Verify, Sign |
 
@@ -37,5 +38,5 @@ Related standards: JUMBF (ISO/IEC 19566-5), JPEG XT boxes in APP11
 - Signing with algorithms other than ES256.
 - Ingredient relationships other than `parentOf` when signing (`componentOf`, `inputTo`).
 - Update manifests and manifest editing.
-- OCSP and CRL revocation checks.
+- CRL revocation checks; OCSP for time-stamp authorities and intermediates; the `c2pa.certificate-status` assertion.
 - CAWG identity assertions.

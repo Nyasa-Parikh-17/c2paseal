@@ -59,10 +59,11 @@ type Manifest struct {
 	sig      *jumbf.Box // cbor content box of the signature
 	layout   hashDataLayout
 
-	external  bool   // store kept outside the file: hash.data has no exclusion
-	protected []byte // serialised COSE protected header
-	sigLen    int    // placeholder signature length (esSignatureLen)
-	tstSize   int    // reserved unprotected header size; 0 = no time-stamp
+	external  bool        // store kept outside the file: hash.data has no exclusion
+	protected []byte      // serialised COSE protected header
+	sigLen    int         // placeholder signature length (esSignatureLen)
+	tstSize   int         // reserved unprotected header size; 0 = no time-stamp
+	extra     map[any]any // other unprotected header entries (rVals)
 	binding   [2]uint64
 	digest    []byte
 }
@@ -185,8 +186,15 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 	if m.protected, err = protectedHeader(opts); err != nil {
 		return nil, err
 	}
+	ocspDER, err := opts.staple()
+	if err != nil {
+		return nil, err
+	}
+	if ocspDER != nil {
+		m.extra = map[any]any{"rVals": rValsHeader(ocspDER)}
+	}
 	if opts.TSAURL != "" {
-		if m.tstSize, err = tstHeaderSize(opts.timestampReserve()); err != nil {
+		if m.tstSize, err = tstHeaderSize(opts.timestampReserve(), m.extra); err != nil {
 			return nil, err
 		}
 	}
@@ -327,7 +335,7 @@ func (m *Manifest) signClaim(claim []byte) ([]byte, error) {
 // time-stamp slot reserved, the unprotected header always encodes to
 // m.tstSize bytes, whatever the token (nil for the placeholder).
 func (m *Manifest) coseSign1(sig, token []byte) ([]byte, error) {
-	unprotected, err := tstHeader(token, m.tstSize)
+	unprotected, err := tstHeader(token, m.tstSize, m.extra)
 	if err != nil {
 		return nil, err
 	}

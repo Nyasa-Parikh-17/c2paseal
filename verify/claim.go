@@ -17,11 +17,26 @@ const (
 )
 
 // checkClaim validates one claim the way c2pa-rs Claim::verify_claim does:
-// signature reference and label, time-stamp, credential and signature, then
-// the assertion references and the actions rules.
+// signature reference and label, revocation (OCSP), time-stamp, credential
+// and signature, then the assertion references and the actions rules. A
+// revoked signer (stapled OCSP) ends the checks there, as in c2pa-rs.
 func checkClaim(m *manifest.Manifest, opts *Options) []Status {
+	out, _ := checkClaimAbort(m, opts)
+	return out
+}
+
+// checkClaimAbort is checkClaim that also returns the status that ends the
+// whole validation, if any: c2pa-rs returns an error for a signer revoked
+// by a stapled OCSP response, and c2patool then reads nothing at all.
+func checkClaimAbort(m *manifest.Manifest, opts *Options) ([]Status, *Status) {
 	out := refChecks(m)
 	ts, tsTime := timeStamp(m, opts)
+	revocation, stop := checkOCSP(m, tsTime, opts)
+	out = append(out, revocation...)
+	if stop {
+		abort := revocation[len(revocation)-1].withKind(Failure)
+		return out, &abort
+	}
 	out = append(out, ts...)
 	out = append(out, credentials(m, tsTime, opts)...)
 	refs, undeclared := assertionRefs(m)
@@ -29,7 +44,7 @@ func checkClaim(m *manifest.Manifest, opts *Options) []Status {
 	if !undeclared {
 		out = append(out, actions(m)...)
 	}
-	return out
+	return out, nil
 }
 
 // absoluteURI turns a relative self#jumbf= URI into one rooted at the store.
@@ -65,26 +80,26 @@ func assertionRefs(m *manifest.Manifest) (out []Status, undeclared bool) {
 		if strings.HasPrefix(path, "/") {
 			owner := manifestOfURI(url)
 			if owner == "" {
-				out = append(out, Status{AssertionHashedURIMismatch, url, "assertion URI malformed: " + url})
+				out = append(out, Status{Code: AssertionHashedURIMismatch, URL: url, Explanation: "assertion URI malformed: " + url})
 				continue
 			}
 			if owner != m.Label {
-				out = append(out, Status{AssertionOutsideManifest, url, "assertion reference to external assertion store: " + url})
+				out = append(out, Status{Code: AssertionOutsideManifest, URL: url, Explanation: "assertion reference to external assertion store: " + url})
 			}
 		}
 		referenced[path[strings.LastIndex(path, "/")+1:]] = true
 		switch {
 		case errors.Is(c.Err, manifest.ErrUnresolved), errors.Is(c.Err, manifest.ErrBadURI):
-			out = append(out, Status{AssertionMissing, abs, "cannot find matching assertion: " + url})
+			out = append(out, Status{Code: AssertionMissing, URL: abs, Explanation: "cannot find matching assertion: " + url})
 		case c.Match:
-			out = append(out, Status{AssertionHashedURIMatch, abs, "hashed uri matched: " + url})
+			out = append(out, Status{Code: AssertionHashedURIMatch, URL: abs, Explanation: "hashed uri matched: " + url})
 		default:
-			out = append(out, Status{AssertionHashedURIMismatch, abs, "hash does not match assertion data: " + url})
+			out = append(out, Status{Code: AssertionHashedURIMismatch, URL: abs, Explanation: "hash does not match assertion data: " + url})
 		}
 	}
 	for _, a := range m.Assertions {
 		if !referenced[a.Label] {
-			out = append(out, Status{AssertionUndeclared, a.Label, "assertion is not referenced by the claim"})
+			out = append(out, Status{Code: AssertionUndeclared, URL: a.Label, Explanation: "assertion is not referenced by the claim"})
 			undeclared = true
 		}
 	}
@@ -120,7 +135,9 @@ func actionAssertions(m *manifest.Manifest, refs []manifest.HashedURI) []actions
 // do not depend on ingredient relationships.
 func actions(m *manifest.Manifest) []Status {
 	var out []Status
-	malformed := func(url, why string) { out = append(out, Status{AssertionActionMalformed, url, why}) }
+	malformed := func(url, why string) {
+		out = append(out, Status{Code: AssertionActionMalformed, URL: url, Explanation: why})
+	}
 
 	// A v1 claim may have one actions assertion; c2pa-rs applies no other
 	// actions rule to v1 claims unless strict_v1_validation is set (it is
@@ -181,12 +198,10 @@ func actions(m *manifest.Manifest) []Status {
 			if act.Action == actionOpened || act.Action == actionPlaced || act.Action == actionRemoved {
 				if ings, ok := act.Parameters["ingredients"]; ok {
 					if list, _ := ings.([]any); len(list) == 0 {
-						out = append(out, Status{AssertionActionIngredientMismatch, url,
-							"opened, placed and removed items must have ingredients parameter must be non empty array"})
+						out = append(out, Status{Code: AssertionActionIngredientMismatch, URL: url, Explanation: "opened, placed and removed items must have ingredients parameter must be non empty array"})
 					}
 				} else if _, ok := act.Parameters["ingredient"]; !ok {
-					out = append(out, Status{AssertionActionIngredientMismatch, url,
-						"opened, placed and removed items must have ingredient(s) parameters"})
+					out = append(out, Status{Code: AssertionActionIngredientMismatch, URL: url, Explanation: "opened, placed and removed items must have ingredient(s) parameters"})
 				}
 			}
 			if act.Action == actionCreated && act.DigitalSourceType == "" {

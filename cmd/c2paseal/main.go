@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
@@ -52,7 +53,8 @@ usage:
   c2paseal inspect [--json] [--recursive] <file or folder>...
         print the manifest store as JSON (as c2patool --detailed does);
         a file without an embedded store is read from its .c2pa sidecar
-  c2paseal verify [--json] [--trust anchors.pem] [--manifest store.c2pa]
+  c2paseal verify [--json] [--trust anchors.pem]... [--allowed-list file]
+                  [--trust-config file] [--fetch-ocsp] [--manifest store.c2pa]
                   [--fetch-remote] [--recursive] <file or folder>...
         validate the manifest store and print the C2PA status codes
 
@@ -62,6 +64,7 @@ usage:
   c2paseal sign [--json] --cert chain.pem --key key.pem --in in --out out
                 [--title t] [--source-type uri] [--tsa url]
                 [--no-history] [--remote url] [--sidecar]
+                [--ocsp | --ocsp-response file.der]
         sign a JPEG or PNG; an existing manifest store is kept as the
         parent ingredient unless --no-history is given
   c2paseal serve [--addr 127.0.0.1:8080] [--pki testdata/pki]
@@ -166,7 +169,11 @@ func inspect(args []string, stdout, stderr io.Writer) int {
 func verifyCmd(args []string, stdout, stderr io.Writer) int {
 	c := newCommand("verify", "[--json] [--trust anchors.pem] [--manifest store.c2pa] [--fetch-remote] [--recursive] <file or folder>...", stdout, stderr).
 		withJSON("print validation results as JSON (one object per line for several files)")
-	trust := c.fs.String("trust", "", "PEM file of trust anchor certificates (default: none, so every signer is untrusted)")
+	var trust stringList
+	c.fs.Var(&trust, "trust", "PEM file of trust anchors, such as the C2PA trust list; repeat for more lists (default: none, so every signer is untrusted)")
+	allowed := c.fs.String("allowed-list", "", "allowed list: PEM certificates or base64 SHA-256 hashes of end-entity certificates trusted as they are")
+	trustConfig := c.fs.String("trust-config", "", "file of extra EKU OIDs to accept for claim signers, one per line")
+	fetchOCSP := c.fs.Bool("fetch-ocsp", false, "check the signer with its OCSP responder when no response is stapled (needs network)")
 	store := c.fs.String("manifest", "", "manifest store kept outside the file (default: the embedded store, else <file>.c2pa next to it)")
 	fetch := c.fs.Bool("fetch-remote", false, "download the manifest store the file's XMP references if it has no embedded or sidecar store (needs network)")
 	recursive := c.fs.Bool("recursive", false, "with a folder, include its subfolders")
@@ -178,7 +185,7 @@ func verifyCmd(args []string, stdout, stderr io.Writer) int {
 	if batch && *store != "" {
 		return c.fail(exitUsage, errors.New("c2paseal verify: --manifest applies to a single file"))
 	}
-	opts := &c2paseal.VerifyOptions{FetchRemote: *fetch}
+	opts := &c2paseal.VerifyOptions{FetchRemote: *fetch, FetchOCSP: *fetchOCSP}
 	if *store != "" {
 		b, err := os.ReadFile(*store)
 		if err != nil {
@@ -186,12 +193,26 @@ func verifyCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		opts.ManifestStore = b
 	}
-	if *trust != "" {
-		anchors, err := c2paseal.LoadTrustAnchors(*trust)
+	for _, path := range trust {
+		anchors, err := c2paseal.LoadTrustList(path)
 		if err != nil {
 			return c.fail(exitUsage, err)
 		}
-		opts.TrustAnchors = anchors
+		opts.TrustAnchors = append(opts.TrustAnchors, anchors...)
+	}
+	if *allowed != "" {
+		list, err := c2paseal.LoadAllowedList(*allowed)
+		if err != nil {
+			return c.fail(exitUsage, err)
+		}
+		opts.AllowedList = list
+	}
+	if *trustConfig != "" {
+		ekus, err := c2paseal.LoadTrustConfig(*trustConfig)
+		if err != nil {
+			return c.fail(exitUsage, err)
+		}
+		opts.ExtraEKUs = ekus
 	}
 	if batch {
 		return verifyBatch(expand(paths, *recursive), opts, *c.asJSON, stdout, stderr)
@@ -228,6 +249,8 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	noHistory := c.fs.Bool("no-history", false, "replace an existing manifest store instead of recording it as the parent ingredient")
 	remote := c.fs.String("remote", "", "URL where the manifest store will be served, written into the file's XMP (dcterms:provenance)")
 	sidecar := c.fs.Bool("sidecar", false, "do not embed the manifest store; write it next to --out as a .c2pa file")
+	ocspFetch := c.fs.Bool("ocsp", false, "staple an OCSP response for the signer, fetched from its responder (needs network)")
+	ocspFile := c.fs.String("ocsp-response", "", "staple this DER OCSP response for the signer")
 	if err := c.fs.Parse(args); err != nil {
 		return c.parseErr(err)
 	}
@@ -241,7 +264,14 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 		return c.fail(exitUsage, err)
 	}
 	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source, TSAURL: *tsa,
-		NoHistory: *noHistory, RemoteURL: *remote, Sidecar: *sidecar}
+		NoHistory: *noHistory, RemoteURL: *remote, Sidecar: *sidecar, FetchOCSP: *ocspFetch}
+	if *ocspFile != "" {
+		b, err := os.ReadFile(*ocspFile)
+		if err != nil {
+			return c.fail(exitUsage, err)
+		}
+		opts.OCSPResponse = b
+	}
 	if err := c2paseal.Sign(*in, *out, opts); err != nil {
 		return c.fail(exitInvalid, err)
 	}
@@ -265,7 +295,7 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	res := map[string]any{
 		"input": *in, "output": *out, "format": s.Format,
 		"active_manifest": s.Active.Label, "time_stamped": *tsa != "",
-		"manifests": len(s.Manifests),
+		"manifests": len(s.Manifests), "ocsp_stapled": len(s.Active.Signature.OCSP) > 0,
 	}
 	if s.Sidecar != "" {
 		res["sidecar"] = s.Sidecar
@@ -365,3 +395,9 @@ func writeJSON(stdout, stderr io.Writer, v any) int {
 	fmt.Fprintln(stdout, string(b))
 	return exitValid
 }
+
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ",") }
+func (l *stringList) Set(s string) error { *l = append(*l, s); return nil }

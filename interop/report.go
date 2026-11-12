@@ -16,6 +16,7 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/ocsp"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/assertion"
 	"github.com/digitorus/timestamp"
@@ -384,6 +385,20 @@ func containerFacts(b []byte) []string {
 					add("time-stamp (sigTst%s): genTime %s, TSA %q issued by %q", map[int]string{1: "", 2: "2"}[t.Version], ts.Time.UTC().Format(time.RFC3339), c.Subject.CommonName, c.Issuer.CommonName)
 					break
 				}
+			}
+		}
+		for _, der := range s.OCSP {
+			r, err := ocsp.ParseResponse(der)
+			if err != nil {
+				add("stapled OCSP response does not parse: %v", err)
+				continue
+			}
+			for _, sr := range r.Responses {
+				who := ""
+				if len(r.Certs) > 0 {
+					who = r.Certs[0].Subject.CommonName
+				}
+				add("stapled OCSP response (rVals): %s for serial %s, from %q", sr.Status, sr.CertID.SerialNumber, who)
 			}
 		}
 	} else if active.SignatureErr != nil {

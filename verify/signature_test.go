@@ -119,7 +119,7 @@ func TestOracle(t *testing.T) {
 	for _, f := range all {
 		for _, mode := range []string{"default", "trusted"} {
 			exp, err := f.Expected()
-			opts := &Options{Now: corpusTime}
+			opts := &Options{Now: corpusTimeFor(f)}
 			if mode == "trusted" {
 				exp, err = f.Trusted()
 				opts.TrustAnchors = anchors
@@ -136,7 +136,8 @@ func TestOracle(t *testing.T) {
 				// A valid, trusted time-stamp (always so for v1 claims) sets the
 				// time for the credential checks, as in checkClaim.
 				_, at := timeStamp(m, opts)
-				got := group(Signature(m, at, opts))
+				revocation, _ := checkOCSP(m, at, opts)
+				got := group(append(revocation, Signature(m, at, opts)...))
 				want := oracleGroup(exp.ValidationResults.ActiveManifest)
 				if !slices.Equal(got, want) {
 					t.Errorf("statuses\n got  %q\n want %q", got, want)

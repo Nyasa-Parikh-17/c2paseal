@@ -35,19 +35,25 @@ type ingredientChecker struct {
 	opts      *Options
 	visited   map[string]bool
 	logged    []scoped
+	abort     *Status // set if an ingredient's checks end the validation
 }
 
 // ingredients validates the ingredients of the active manifest (and theirs,
 // recursively) and returns the deltas: statuses not already recorded in the
-// validation results stored in the store's ingredient assertions.
-func ingredients(all []*manifest.Manifest, active *manifest.Manifest, opts *Options) []IngredientDelta {
+// validation results stored in the store's ingredient assertions. abort is
+// set if an ingredient's checks end the whole validation (see
+// checkClaimAbort).
+func ingredients(all []*manifest.Manifest, active *manifest.Manifest, opts *Options) (deltas []IngredientDelta, abort *Status) {
 	c := &ingredientChecker{manifests: map[string]*manifest.Manifest{}, opts: opts, visited: map[string]bool{active.Label: true}}
 	for _, m := range all {
 		c.manifests[m.Label] = m
 	}
 	c.check(active, 0)
+	if c.abort != nil {
+		return nil, c.abort
+	}
 	if len(c.logged) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	stored := storedStatuses(all)
@@ -68,7 +74,7 @@ func ingredients(all []*manifest.Manifest, active *manifest.Manifest, opts *Opti
 		}
 		out[i].ValidationDeltas = append(out[i].ValidationDeltas, s)
 	}
-	return out
+	return out, nil
 }
 
 func (c *ingredientChecker) log(uri string, statuses ...Status) {
@@ -89,35 +95,39 @@ func (c *ingredientChecker) check(m *manifest.Manifest, depth int) {
 		uri := assertionURL(m.Label, a.Label)
 		ing, err := decodeIngredient(a)
 		if err != nil {
-			c.log(uri, Status{AssertionIngredientMalformed, a.Label, "ingredient assertion could not be parsed"})
+			c.log(uri, Status{Code: AssertionIngredientMalformed, URL: a.Label, Explanation: "ingredient assertion could not be parsed"})
 			return
 		}
 		if ing.ref == nil {
 			if ing.relationship != "inputTo" {
-				c.log(uri, Status{IngredientUnknownProv, uri, cmp.Or(ing.title, "no title") + ": ingredient does not have provenance"})
+				c.log(uri, Status{Code: IngredientUnknownProv, URL: uri, Explanation: cmp.Or(ing.title, "no title") + ": ingredient does not have provenance"})
 			}
 			continue
 		}
 		if ing.version >= 3 && !ing.hasResults {
-			c.log(uri, Status{AssertionIngredientMalformed, uri, "ingredient V3 must have validation results"})
+			c.log(uri, Status{Code: AssertionIngredientMalformed, URL: uri, Explanation: "ingredient V3 must have validation results"})
 		}
 		label := manifestOfURI(ing.ref.URL)
 		target := c.manifests[label]
 		if target == nil {
-			c.log(uri, Status{IngredientManifestMissing, label, "ingredient not found"})
+			c.log(uri, Status{Code: IngredientManifestMissing, URL: label, Explanation: "ingredient not found"})
 			continue
 		}
 		alg := cmp.Or(ing.ref.Alg, target.Claim.Alg, manifest.DefaultAlg)
 		switch {
 		case hashMatches(alg, target.Box, nil, ing.ref.Hash):
-			c.log(uri, Status{IngredientManifestValidated, ing.ref.URL, "ingredient hash matched"})
+			c.log(uri, Status{Code: IngredientManifestValidated, URL: ing.ref.URL, Explanation: "ingredient hash matched"})
 		case hashMatches(alg, nil, target.Claim.Raw, ing.ref.Hash):
 			// Before C2PA 1.3 the ingredient hash covered the claim bytes,
 			// not the manifest box; c2pa-rs accepts it and logs nothing.
 		default:
-			c.log(uri, Status{IngredientManifestMismatch, ing.ref.URL, "ingredient hash incorrect"})
+			c.log(uri, Status{Code: IngredientManifestMismatch, URL: ing.ref.URL, Explanation: "ingredient hash incorrect"})
 		}
-		c.log(uri, checkClaim(target, c.opts)...)
+		statuses, abort := checkClaimAbort(target, c.opts)
+		if abort != nil && c.abort == nil {
+			c.abort = abort
+		}
+		c.log(uri, statuses...)
 		if !c.visited[target.Label] {
 			c.visited[target.Label] = true
 			c.check(target, depth+1)
@@ -298,7 +308,7 @@ func referencedManifests(all []*manifest.Manifest, active *manifest.Manifest) []
 			if target := byLabel[label]; target != nil {
 				walk(target, depth+1)
 			} else {
-				out = append(out, Status{IngredientManifestMissing, label, "ingredient manifest missing"})
+				out = append(out, Status{Code: IngredientManifestMissing, URL: label, Explanation: "ingredient manifest missing"})
 			}
 		}
 	}

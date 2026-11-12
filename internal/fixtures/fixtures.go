@@ -29,10 +29,13 @@ const (
 	// Legacy holds C2PA 1.x files (claim v1): some from the public c2pa-rs
 	// test corpus, some written by c2patool with the test PKI.
 	Legacy Kind = "legacy"
+	// OCSP holds files signed by the OCSP test signers with a stapled
+	// response (good, revoked, unknown) from the test responder.
+	OCSP Kind = "ocsp"
 )
 
 // Kinds lists every corpus directory, in a stable order.
-var Kinds = []Kind{Unsigned, Signed, Broken, Sample, Remote, Legacy}
+var Kinds = []Kind{Unsigned, Signed, Broken, Sample, Remote, Legacy, OCSP}
 
 // Fixture is one test image and the paths of its oracle output.
 type Fixture struct {

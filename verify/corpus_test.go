@@ -102,7 +102,7 @@ func TestCorpus(t *testing.T) {
 			n++
 			t.Run(f.String()+"/"+mode, func(t *testing.T) {
 				exp, err := f.Expected()
-				opts := &Options{Now: corpusTime}
+				opts := &Options{Now: corpusTimeFor(f)}
 				if mode == "trusted" {
 					exp, err = f.Trusted()
 					opts.TrustAnchors = anchors
@@ -164,6 +164,15 @@ func TestCorpus(t *testing.T) {
 // long before the test PKI's 2031 expiry. Without it the comparisons would
 // start failing once the test certificates expire.
 func corpusTime() time.Time { return time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC) }
+
+// corpusTimeFor is corpusTime, except for the OCSP fixtures, whose signers
+// were issued in November 2026 (scripts/genocsppki).
+func corpusTimeFor(f fixtures.Fixture) func() time.Time {
+	if f.Kind == fixtures.OCSP {
+		return func() time.Time { return time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC) }
+	}
+	return corpusTime
+}
 
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")

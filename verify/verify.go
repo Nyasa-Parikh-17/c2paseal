@@ -1,8 +1,11 @@
 package verify
 
 import (
+	"bytes"
+	"cmp"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
@@ -94,11 +97,53 @@ func File(b []byte, opts *Options) *Result {
 	if err != nil {
 		return fail(ClaimMalformed, err.Error())
 	}
+	for _, m := range ms {
+		if IsPrerelease(m) {
+			return fail(Prerelease, "prerelease claim found: "+m.Label)
+		}
+	}
 	active := ms[len(ms)-1]
-	r := &Result{ActiveManifest: checkClaim(active, opts)}
+	r := &Result{ActiveManifest: referencedManifests(ms, active)}
+	r.ActiveManifest = append(r.ActiveManifest, checkClaim(active, opts)...)
 	r.IngredientDeltas = ingredients(ms, active, opts)
 	r.ActiveManifest = append(r.ActiveManifest, hardBinding(active, b)...)
 	return r
+}
+
+// IsPrerelease reports pre-1.0 manifest data the way c2pa-rs does
+// (store.rs is_old_assertion): the claim's hash for the first assertion in
+// the store is the hash of the assertion's payload alone, not of its box.
+// c2pa-rs refuses to read such a store; File reports com.adobe.prerelease.
+func IsPrerelease(m *manifest.Manifest) bool {
+	if len(m.Assertions) == 0 {
+		return false
+	}
+	first := m.Assertions[0]
+	var ref *manifest.HashedURI
+	for _, r := range m.Claim.Assertions() {
+		if strings.HasSuffix(r.URL, "/"+first.Label) {
+			ref = &r
+			break
+		}
+	}
+	if ref == nil {
+		return false
+	}
+	var data []byte
+	switch c := first.Box.Contents(); {
+	case len(c) == 1 && (c[0].Type == "cbor" || c[0].Type == "json"):
+		data = c[0].Payload
+	case len(c) == 2 && c[0].Type == "bfdb" && c[1].Type == "bidb":
+		data = c[1].Payload
+	default:
+		return false
+	}
+	h, err := manifest.NewHash(cmp.Or(ref.Alg, m.Claim.Alg, manifest.DefaultAlg))
+	if err != nil {
+		return false
+	}
+	h.Write(data)
+	return bytes.Equal(h.Sum(nil), ref.Hash)
 }
 
 // isJUMBFError reports whether err came from parsing the JUMBF box tree, as

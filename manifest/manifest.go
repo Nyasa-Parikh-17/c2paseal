@@ -56,18 +56,19 @@ func DecodeManifest(box *jumbf.Box) (*Manifest, error) {
 	fail := func(err error) (*Manifest, error) {
 		return nil, fmt.Errorf("manifest %q: %w", m.Label, err)
 	}
-	if box.Child(LabelClaimV1) != nil && box.Child(LabelClaimV2) == nil {
-		return fail(fmt.Errorf("%w: claim v1 (c2pa.claim)", ErrUnsupportedClaim))
-	}
+	decode := DecodeClaim
 	m.ClaimBox = box.Child(LabelClaimV2)
 	if m.ClaimBox == nil {
-		return fail(fmt.Errorf("%w: no %s box", ErrMalformedManifest, LabelClaimV2))
+		m.ClaimBox, decode = box.Child(LabelClaimV1), DecodeClaimV1
+	}
+	if m.ClaimBox == nil {
+		return fail(fmt.Errorf("%w: no %s or %s box", ErrMalformedManifest, LabelClaimV2, LabelClaimV1))
 	}
 	c := m.ClaimBox.Contents()
 	if len(c) != 1 || c[0].Type != "cbor" {
 		return fail(fmt.Errorf("%w: claim box does not hold one cbor box", ErrMalformedManifest))
 	}
-	claim, err := DecodeClaim(c[0].Payload)
+	claim, err := decode(c[0].Payload)
 	if err != nil {
 		return fail(err)
 	}

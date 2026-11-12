@@ -33,9 +33,13 @@ func TestHashChecks(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		legacy := f.Kind == fixtures.Legacy
 		for _, m := range ms {
-			if s := m.Signature; m.SignatureErr != nil || s.Alg != cose.AlgES256 || len(s.X5Chain) != 2 || len(s.Signature) != 64 {
-				t.Errorf("%s: signature %v, err %v", f, s, m.SignatureErr)
+			// Our corpus is ES256 with a 2-certificate chain; 1.x files vary.
+			if m.SignatureErr != nil {
+				t.Errorf("%s: signature: %v", f, m.SignatureErr)
+			} else if s := m.Signature; !legacy && (s.Alg != cose.AlgES256 || len(s.X5Chain) != 2 || len(s.Signature) != 64) {
+				t.Errorf("%s: alg %d, %d certificates, %d-byte signature", f, s.Alg, len(s.X5Chain), len(s.Signature))
 			}
 			if len(m.HashChecks) != len(m.Claim.Assertions()) {
 				t.Errorf("%s: %d checks for %d references", f, len(m.HashChecks), len(m.Claim.Assertions()))
@@ -45,6 +49,9 @@ func TestHashChecks(t *testing.T) {
 					t.Errorf("%s: %s: %v", f, c.Ref.URL, c.Err)
 				}
 				wantMatch := !(f.Name == "assertion-flip.jpg" && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.actions.v2")
+				if legacy {
+					continue // statuses are checked against the oracle in verify
+				}
 				if c.Match != wantMatch {
 					t.Errorf("%s: %s: match = %v, want %v", f, c.Ref.URL, c.Match, wantMatch)
 				}

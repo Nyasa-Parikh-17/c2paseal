@@ -180,7 +180,7 @@ func TestSignatureTime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		r := reportSignature(s.Active.Signature)
+		r := reportSignature(s.Active)
 		if (r.Time != nil) != wantTime || r.Issuer == nil || *r.CommonName != "C2paSeal Test Signer" {
 			t.Errorf("%s: signature report %+v", name, r)
 		}
@@ -205,5 +205,24 @@ func TestRFC3339(t *testing.T) {
 		if got := rfc3339(tm); got != want {
 			t.Errorf("rfc3339(%s) = %s, want %s", in, got, want)
 		}
+	}
+}
+
+// TestSignatureTimeInvalid: a time-stamp that does not match the signature
+// gives no signature.time, as in c2patool.
+func TestSignatureTimeInvalid(t *testing.T) {
+	dir, err := fixtures.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Read(dir + "/legacy/E-sig-CA.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Active.Signature.Timestamps) == 0 {
+		t.Fatal("E-sig-CA.jpg has no time-stamp")
+	}
+	if r := reportSignature(s.Active); r.Time != nil {
+		t.Errorf("signature.time %s for a mismatching time-stamp", *r.Time)
 	}
 }

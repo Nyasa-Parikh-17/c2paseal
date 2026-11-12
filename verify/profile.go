@@ -75,7 +75,8 @@ func checkProfile(cert *x509.Certificate, t time.Time, otherEKUs []asn1.ObjectId
 	if !slices.Contains(allowedSigAlgs, cert.SignatureAlgorithm) {
 		return invalid("certificate algorithm not supported")
 	}
-	switch pub := cert.PublicKey.(type) {
+	key, _ := publicKey(cert)
+	switch pub := key.(type) {
 	case *ecdsa.PublicKey:
 		if c := pub.Curve; c != elliptic.P256() && c != elliptic.P384() && c != elliptic.P521() {
 			return invalid("certificate unsupported EC curve")

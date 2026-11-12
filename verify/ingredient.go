@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/cbormode"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/assertion"
@@ -107,9 +108,13 @@ func (c *ingredientChecker) check(m *manifest.Manifest, depth int) {
 			continue
 		}
 		alg := cmp.Or(ing.ref.Alg, target.Claim.Alg, manifest.DefaultAlg)
-		if sum, err := manifest.HashBox(alg, target.Box); err == nil && bytes.Equal(sum, ing.ref.Hash) {
+		switch {
+		case hashMatches(alg, target.Box, nil, ing.ref.Hash):
 			c.log(uri, Status{IngredientManifestValidated, ing.ref.URL, "ingredient hash matched"})
-		} else {
+		case hashMatches(alg, nil, target.Claim.Raw, ing.ref.Hash):
+			// Before C2PA 1.3 the ingredient hash covered the claim bytes,
+			// not the manifest box; c2pa-rs accepts it and logs nothing.
+		default:
 			c.log(uri, Status{IngredientManifestMismatch, ing.ref.URL, "ingredient hash incorrect"})
 		}
 		c.log(uri, checkClaim(target, c.opts)...)
@@ -246,4 +251,57 @@ func containsStatus(list []Status, s Status) bool {
 		}
 	}
 	return false
+}
+
+// hashMatches reports whether want is the hash of box (its content, as
+// HashBox computes it) or, with box nil, of data.
+func hashMatches(alg string, box *jumbf.Box, data []byte, want []byte) bool {
+	if box != nil {
+		sum, err := manifest.HashBox(alg, box)
+		return err == nil && bytes.Equal(sum, want)
+	}
+	h, err := manifest.NewHash(alg)
+	if err != nil {
+		return false
+	}
+	h.Write(data)
+	return bytes.Equal(h.Sum(nil), want)
+}
+
+// referencedManifests reports every ingredient manifest that the active
+// manifest's ingredient tree references but the store lacks, the way the
+// c2pa-rs pre-pass get_claim_referenced_manifests does before any claim is
+// checked. Statuses go to the active manifest, with the label as URL.
+func referencedManifests(all []*manifest.Manifest, active *manifest.Manifest) []Status {
+	byLabel := map[string]*manifest.Manifest{}
+	for _, m := range all {
+		byLabel[m.Label] = m
+	}
+	var out []Status
+	visited := map[string]bool{}
+	var walk func(m *manifest.Manifest, depth int)
+	walk = func(m *manifest.Manifest, depth int) {
+		if depth >= maxIngredientDepth || visited[m.Label] {
+			return
+		}
+		visited[m.Label] = true
+		for _, a := range m.Assertions {
+			base := assertion.BaseLabel(a.Label)
+			if base != "c2pa.ingredient" && !strings.HasPrefix(base, "c2pa.ingredient.v") {
+				continue
+			}
+			ing, err := decodeIngredient(a)
+			if err != nil || ing.ref == nil {
+				continue
+			}
+			label := manifestOfURI(ing.ref.URL)
+			if target := byLabel[label]; target != nil {
+				walk(target, depth+1)
+			} else {
+				out = append(out, Status{IngredientManifestMissing, label, "ingredient manifest missing"})
+			}
+		}
+	}
+	walk(active, 0)
+	return out
 }

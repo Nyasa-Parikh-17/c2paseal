@@ -69,3 +69,27 @@ func FuzzDecodeStore(f *testing.F) {
 		}
 	})
 }
+
+// FuzzDecodeClaimV1 decodes arbitrary bytes as a C2PA 1.x claim.
+func FuzzDecodeClaimV1(f *testing.F) {
+	for _, root := range fixtureStores() {
+		if ms, err := DecodeStore(root); err == nil {
+			for _, m := range ms {
+				if m.Claim.Version == 1 {
+					f.Add(m.Claim.Raw)
+				}
+			}
+		}
+	}
+	f.Add([]byte{0xA0})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		c, err := DecodeClaimV1(b)
+		if err != nil {
+			return
+		}
+		if string(c.Raw) != string(b) || c.Version != 1 || c.ClaimGeneratorInfo == nil {
+			t.Fatalf("decoded v1 claim %+v", c)
+		}
+		_ = c.Assertions()
+	})
+}

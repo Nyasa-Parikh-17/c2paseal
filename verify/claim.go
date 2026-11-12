@@ -122,6 +122,22 @@ func actions(m *manifest.Manifest) []Status {
 	var out []Status
 	malformed := func(url, why string) { out = append(out, Status{AssertionActionMalformed, url, why}) }
 
+	// A v1 claim may have one actions assertion; c2pa-rs applies no other
+	// actions rule to v1 claims unless strict_v1_validation is set (it is
+	// off by default).
+	if m.Claim.Version == 1 {
+		n := 0
+		for _, a := range m.Assertions {
+			if base := assertion.BaseLabel(a.Label); base == assertion.LabelActions || base == assertion.LabelActionsV2 {
+				n++
+			}
+		}
+		if n > 1 {
+			malformed(m.Label, "only one action assertion allowed for v1 claims")
+		}
+		return out
+	}
+
 	created := actionAssertions(m, m.Claim.CreatedAssertions)
 	gathered := actionAssertions(m, m.Claim.GatheredAssertions)
 	all := append(append([]actionsRef(nil), created...), gathered...)

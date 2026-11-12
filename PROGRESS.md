@@ -6,16 +6,15 @@ Append one entry per phase: phase number, date, what was built, test results, op
 
 Scope-creep ideas go here instead of being built.
 
-- Read claim v1 (`c2pa.claim`, C2PA 1.x files): `claim_generator` string,
-  `claim_generator_info` as an array, single `assertions` list.
 - Actions rules that need ingredient relationships (c2pa-rs 2.b: opened →
   one `parentOf`, placed → `componentOf`), `c2pa.translated` languages,
   action/template icons, metadata rules, redaction rules.
-- Time-stamps: use the CMS `signingTime` signed attribute when present (as
-  c2pa-rs does); tell a bad CMS signature (`timeStamp.untrusted`) apart from
-  an unparseable token (`timeStamp.malformed`) — `digitorus/timestamp.Parse`
-  reports both as one error.
-- Legacy (pre-1.3) ingredient manifest hash fallback; redacted ingredients.
+- Redacted ingredients (the claimSignature fallback when a redaction breaks
+  the ingredient manifest hash).
+- Verifying the 1.x verifiable credentials store (`c2pa.credentials`): it is
+  shown by `inspect`, not checked.
+- Strict v1 validation (c2pa-rs `strict_v1_validation`, off by default): the
+  full actions rules on v1 claims.
 - OCSP / revocation; allowed end-entity lists; BMFF, boxes and collection
   hard bindings.
 - Remote manifests: HTTP `Link: rel=c2pa-manifest` discovery (§15.5.3.2);
@@ -25,7 +24,8 @@ Scope-creep ideas go here instead of being built.
   component ingredients (`componentOf`, c2pa.placed / removed actions) and
   ingredient thumbnails; the parent ingredient and c2pa.opened were added
   in Phase 18, CreativeWork and other assertions,
-  signature algorithms other than ES256, keys in HSMs beyond crypto.Signer.
+  signing with algorithms other than ES256 (verifying them was approved and
+  added in Phase 19), keys in HSMs beyond crypto.Signer.
 
 ## Log
 
@@ -952,3 +952,123 @@ SHA256SUMS. Phase 16's "Done when" checks now pass.
 - Re-signing a file whose only store is a sidecar or remote one does not
   record it as the parent, because the parent must be embedded. Added to
   Future work.
+
+### Phase 19 — Legacy manifests, time-stamp follow-ups, CLI batch mode (2026-11-13)
+
+**Decision (user, 2026-11-12):** every C2PA 1.x file in the public c2pa-rs
+corpus is signed PS256, which SPEC.md had out of scope. The user approved
+verify-only support for PS256/384/512, ES384/512 and Ed25519 with the Go
+standard library; signing stays ES256. SPEC.md and README updated.
+
+**Built**
+- Signature algorithms (`verify/alg.go`): ES256/384/512 (raw r|s, the curve
+  must match the algorithm), PS256/384/512 (RSASSA-PSS, salt length = digest
+  length, as c2pa-rs), Ed25519. Certificates with an id-RSASSA-PSS key,
+  which Go's x509 leaves unparsed, are read by hand, and the profile's
+  2048-bit minimum applies to them. The DER-signature check applies to the
+  EC algorithms only. Unknown algorithms still give `algorithm.unsupported`.
+- Claim v1 (`manifest.DecodeClaimV1`, label `c2pa.claim`), following c2pa-rs
+  `Claim::from_value`: only v1 keys; `claim_generator`, `signature`,
+  `assertions`, `dc:format` and `instanceID` required. `Claim.Version`
+  is 1 or 2; the v1 fields (`ClaimGenerator`, `GeneratorInfoV1`, `Format`,
+  `V1Assertions`, `ClaimGeneratorHints`) are kept apart, and
+  `ClaimGeneratorInfo` holds the first `claim_generator_info` entry (or the
+  generator string). `Assertions()` returns the v1 list. `Encode` still
+  writes v2 only. `ErrUnsupportedClaim` is no longer returned.
+- v1 rules in `verify`, each from c2pa-rs:
+  - no `urn:c2pa:` label check (1.x used `urn:uuid:`);
+  - actions: only "one actions assertion"; the other rules are skipped
+    (`strict_v1_validation` is off by default);
+  - time-stamps: the authority's trust is not checked (claim.rs turns off
+    `verify_timestamp_trust` for v1), so a valid v1 token is
+    `timeStamp.trusted` and its time is used for the signer checks;
+  - pre-1.3 ingredient hash: if the hash does not match the manifest box,
+    a hash of the ingredient's claim bytes is accepted, logging nothing.
+    This was a separate Future work item; it is needed to read 1.x files
+    and is two cases in one switch, so it was done here.
+- `cose.Decode` finds `x5chain` as c2pa-rs does: label 33 or text
+  `"x5chain"` in the protected header, only text `"x5chain"` in the
+  unprotected one, and not both. (c2pa-rs 0.16 files use the text label.)
+- Prerelease (pre-1.0) stores: `verify.IsPrerelease` applies c2pa-rs's
+  test (the first assertion's claim hash is over its payload alone). `File`
+  reports `com.adobe.prerelease` as the one failure, `Read` returns
+  `ErrPrerelease`; c2patool refuses such files.
+- Found while matching 1.x files, not 1.x specific: c2pa-rs's pre-pass
+  `get_claim_referenced_manifests` logs `ingredient.manifest.missing` in the
+  active manifest's results for every ingredient manifest the tree
+  references but the store lacks, before any claim is checked.
+  `referencedManifests` does the same.
+- Time-stamps (`verify/tst.go`): a small CMS SignedData reader (standard
+  library `encoding/asn1`) replaces `digitorus/timestamp.Parse` on the
+  verify path, so each step follows c2pa-rs `verify_time_stamp`:
+  unreadable token or no TSTInfo/messageDigest → `timeStamp.malformed`;
+  no certificates, or a CMS signature that does not verify →
+  `timeStamp.untrusted`; messageDigest or imprint mismatch →
+  `timeStamp.mismatch`. The CMS `signingTime` attribute replaces genTime
+  when present. A TimeStampResp is accepted as well as a bare token (c2pa-rs
+  1.x files store the response). The CMS signature scheme follows the TSA
+  key type and the SignerInfo digest, as c2pa-rs's
+  `validator_for_sig_and_hash_algs`. `digitorus/timestamp` stays on the
+  signing path.
+- `verify.SigningTime`: the time of a token valid for the signature,
+  whatever the TSA's trust, as c2patool's `signature.time`; the report now
+  omits it when the token does not match (E-sig-CA.jpg).
+- Report (`inspect`, `MarshalJSON`): the real `claim_version`; v1 files
+  without `claim_generator_info` show `[]`; hashed-URI hashes stored as
+  integer arrays (old c2pa-rs, JSON assertions) shown as base64, as
+  c2patool does; the 1.x `credential_store`.
+- CLI batch mode (`cmd/c2paseal/batch.go`): `verify` and `inspect` take
+  several files or folders. A folder gives its `.jpg`/`.jpeg`/`.png`
+  files, sorted, and its subfolders' with `--recursive`. One result per
+  file: a line (plus failure codes) and a summary for `verify`, JSON Lines
+  with `--json` (`inspect` always). Exit 1 if any file is invalid or
+  unreadable. A single file behaves as before; `--manifest` stays
+  single-file.
+- Fixtures: `scripts/make-legacy-fixtures.sh` builds `testdata/legacy/`:
+  10 files from the c2pa-rs corpus at a pinned commit, checked by SHA-256
+  (MIT OR Apache-2.0), and 3 v1 files written by c2patool with the test
+  PKI (`"claim_version": 1`): `v1.jpg`, `v1.png`, `v1-edited.jpg` (a v1
+  chain). `fixtures.Legacy`; `scripts/oracle` knows `legacy`. `cloud.jpg`
+  was left out: its store is only at an Adobe URL.
+- Interop: the legacy files are in INTEROP.md. Five new explained causes,
+  all c2pa-mcp or "no oracle": it checks TSA trust on v1 claims; it reports
+  ingredient failures already recorded in the ingredient assertion; it calls
+  a missing ingredient manifest a mismatch; it classifies
+  `timeStamp.mismatch` as a failure; and for `prerelease.jpg` c2patool
+  refuses the file. Container facts now show the claim version and read
+  TimeStampResp-wrapped tokens.
+- Tests: `TestAlgorithms` (all seven algorithms signed by go-cose, wrong key
+  type and curve), `TestPSSKey`, `TestDecodeClaimV1`, the time-stamp cases
+  (signingTime both ways, bad CMS signature, no certificates, messageDigest
+  mismatch or missing, no signed attributes, signer not embedded,
+  TimeStampResp, v1 trust, and a digitorus token as a cross-check) built
+  with a test-only CMS writer so they do not depend on the clock,
+  `TestBatchMatchesSingle`, `TestExpand`, `TestVerifyBatchText`,
+  `TestSignatureTimeInvalid`. Existing tests adjusted where the corpus grew:
+  manifest tests compare v1 claims under their v1 keys; the JPEG layout
+  round trip skips `ocsp.jpg` (Photoshop puts APP11 after Exif; Extract is
+  still exact); `TestOracle` passes the time-stamp time as `checkClaim` does.
+- Fuzz: new `FuzzToken` and `FuzzDecodeClaimV1`.
+
+**Results**
+- TestCorpus: all 13 legacy fixtures match c2patool in both modes, kind by
+  kind and in order, with ingredient deltas and state; `prerelease.jpg`
+  gives exactly one failure where c2patool errors. TestGolden (the JSON
+  report) and the manifest fixture tests match the oracle on them too.
+- Batch: a recursive `verify --json` over `testdata/` gives, for every
+  image, exactly the single-file result, in both trust modes; `inspect`
+  likewise.
+- INTEROP.md (`-require c2patool,c2pa-mcp -strict`): 64 files × 2 modes,
+  C2paSeal agrees with c2patool on every file where c2patool reports
+  statuses; 74 disagreements, all explained, 0 unexplained.
+- gofmt, build, vet, staticcheck and the full suite are clean. Coverage:
+  verify 92.7%, manifest 94.7%, manifest/cose 89.7%, cmd/c2paseal 91.1%,
+  root 80.4%.
+- Fuzzing, 2 minutes each, no crashers: `FuzzDecodeClaimV1` (3.35M execs),
+  `FuzzDecodeStore`, `FuzzFile` (6.9k), `FuzzToken` (53k in one run,
+  1.4k in another; fuzzing the instrumented verify package is slow on this
+  machine, as `FuzzFile` was in Phase 18).
+
+**Open issues**
+- c2pa-rs sets `signature.time` from a passthrough trust policy; we take
+  the time of any token valid for the signature. They agree on the corpus.

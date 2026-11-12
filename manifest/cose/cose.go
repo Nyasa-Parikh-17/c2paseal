@@ -13,7 +13,15 @@ const (
 	HeaderAlg     = 1
 	HeaderX5Chain = 33 // RFC 9360
 
-	AlgES256 = -7
+	headerX5ChainText = "x5chain" // pre-RFC 9360 C2PA signers
+
+	AlgES256   = -7
+	AlgES384   = -35
+	AlgES512   = -36
+	AlgPS256   = -37
+	AlgPS384   = -38
+	AlgPS512   = -39
+	AlgEd25519 = -8
 
 	tagSign1 = 18
 )
@@ -87,10 +95,20 @@ func Decode(b []byte) (*Sign1, error) {
 	}
 	s.Alg = alg
 
-	// C2PA 2.x puts x5chain in the protected header; 1.x allowed unprotected.
+	// C2PA 2.x puts x5chain in the protected header (label 33). Older
+	// signers used the text label "x5chain", and 1.x allowed it in the
+	// unprotected header, but only under the text label; it may not be in
+	// both (c2pa-rs cert_chain_from_sign1).
 	chain := lookup(s.Headers, HeaderX5Chain)
 	if chain == nil {
-		chain = lookup(s.Unprotected, HeaderX5Chain)
+		chain = lookup(s.Headers, headerX5ChainText)
+	}
+	legacy := lookup(s.Unprotected, headerX5ChainText)
+	switch {
+	case chain == nil:
+		chain = legacy
+	case legacy != nil:
+		return fail("x5chain in both the protected and the unprotected header")
 	}
 	switch c := chain.(type) {
 	case []byte:
@@ -186,17 +204,17 @@ func AlgName(alg int64) string {
 	switch alg {
 	case AlgES256:
 		return "es256"
-	case -35:
+	case AlgES384:
 		return "es384"
-	case -36:
+	case AlgES512:
 		return "es512"
-	case -37:
+	case AlgPS256:
 		return "ps256"
-	case -38:
+	case AlgPS384:
 		return "ps384"
-	case -39:
+	case AlgPS512:
 		return "ps512"
-	case -8:
+	case AlgEd25519:
 		return "ed25519"
 	}
 	return ""

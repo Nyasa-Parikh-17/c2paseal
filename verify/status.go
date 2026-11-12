@@ -71,7 +71,10 @@ const (
 	AlgorithmUnsupported              = "algorithm.unsupported"
 	ManifestMissing                   = "manifest.missing"
 	ManifestInaccessible              = "manifest.inaccessible"
-	GeneralError                      = "general.error"
+	// Prerelease is c2pa-rs's code for pre-1.0 (prerelease) manifest data,
+	// which it refuses to read.
+	Prerelease   = "com.adobe.prerelease"
+	GeneralError = "general.error"
 )
 
 // KindOf classifies a status code the way c2pa-rs log_kind does: a fixed

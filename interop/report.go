@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/asn1"
 	"errors"
 	"fmt"
 	"os"
@@ -326,7 +327,7 @@ func containerFacts(b []byte) []string {
 		return facts
 	}
 	active := ms[len(ms)-1]
-	add("%d manifest(s); active %s", len(ms), active.Label)
+	add("%d manifest(s); active %s (claim v%d)", len(ms), active.Label, active.Claim.Version)
 	for _, a := range active.Assertions {
 		dh, ok := a.Value.(*assertion.DataHash)
 		if !ok {
@@ -373,7 +374,7 @@ func containerFacts(b []byte) []string {
 			}
 		}
 		for _, t := range s.Timestamps {
-			ts, err := timestamp.Parse(t.Token)
+			ts, err := parseTimeStamp(t.Token)
 			if err != nil {
 				add("time-stamp token does not parse: %v", err)
 				continue
@@ -389,4 +390,23 @@ func containerFacts(b []byte) []string {
 		add("COSE_Sign1 does not decode: %v", active.SignatureErr)
 	}
 	return facts
+}
+
+// parseTimeStamp reads an RFC 3161 token, or a TimeStampResp carrying one
+// (c2pa-rs 1.x files store the whole response).
+func parseTimeStamp(b []byte) (*timestamp.Timestamp, error) {
+	ts, err := timestamp.Parse(b)
+	if err == nil {
+		return ts, nil
+	}
+	var resp struct {
+		Status asn1.RawValue
+		Token  asn1.RawValue
+	}
+	if rest, rerr := asn1.Unmarshal(b, &resp); rerr == nil && len(rest) == 0 && len(resp.Token.FullBytes) > 0 {
+		if ts, rerr := timestamp.Parse(resp.Token.FullBytes); rerr == nil {
+			return ts, nil
+		}
+	}
+	return nil, err
 }

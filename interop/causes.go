@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Nyasa-Parikh-17/c2paseal"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/cose"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
@@ -116,6 +117,90 @@ var causes = []struct {
 			"and C2paSeal does the same (`VerifyFile` finds the sidecar; the harness turns on `FetchRemote`); the two agree. " +
 			"c2pa-mcp `verify` has no sidecar or remote option and reports `claim.missing` (`no C2PA manifest found`)."},
 	},
+	{
+		// C2PA 1.x claims: the time-stamp authority's trust.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			return v1Stamp(r, seal, tool, mcp) && sameSet(mcp.Failure, append(slices.Clone(seal.Failure), verify.TimeStampUntrusted))
+		},
+		cause: cause{"c2pa-mcp: checks the time-stamp authority's trust on C2PA 1.x claims", v1StampText},
+	},
+	{
+		// C2PA 1.x claims with an ingredient whose recorded results hold failures.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			return v1Stamp(r, seal, tool, mcp) &&
+				sameSet(mcp.Failure, append(slices.Clone(seal.Failure), verify.TimeStampUntrusted, verify.ClaimSignatureMismatch, verify.TimeStampMismatch))
+		},
+		cause: cause{"c2pa-mcp: reports ingredient failures the ingredient assertion already records", v1StampText + " " +
+			"In addition, the active manifest's `c2pa.ingredient.v2` records `claimSignature.mismatch` in its `validationStatus`: the ingredient's own signature was " +
+			"already bad when the file was made (the c2pa-rs corpus builds this file to test exactly that). c2patool and C2paSeal report only deltas, statuses not " +
+			"already recorded in the ingredient assertion, so the known failure does not count against the active manifest. c2pa-mcp reports the ingredient's " +
+			"`claimSignature.mismatch` and `timeStamp.mismatch` as failures of the file."},
+	},
+	{
+		// C2PA 1.x claims with an ingredient manifest that is not in the store.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			if !v1Stamp(r, seal, tool, mcp) || !slices.Contains(seal.Failure, verify.IngredientManifestMissing) {
+				return false
+			}
+			want := append(without(seal.Failure, verify.IngredientManifestMissing), verify.TimeStampUntrusted, verify.IngredientManifestMismatch)
+			return sameSet(mcp.Failure, want)
+		},
+		cause: cause{"c2pa-mcp: reports a missing ingredient manifest as a mismatch", v1StampText + " " +
+			"In addition, one ingredient's `c2pa_manifest` URI names a manifest label (`contentbeef:urn:uuid:…`) that is not in the store; the c2pa-rs corpus edits " +
+			"the label to test this, which also breaks that assertion's hashed URI. c2patool and C2paSeal report `ingredient.manifest.missing` " +
+			"(c2pa-rs checks the referenced manifests before validating any claim). c2pa-mcp reports `ingredient.manifest.mismatch`. All three find the file Invalid."},
+	},
+	{
+		// timeStamp.mismatch: failure for c2pa-mcp, informational elsewhere.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			if mcp.Skipped || key(seal) != key(tool) || !slices.Contains(seal.Info, verify.TimeStampMismatch) {
+				return false
+			}
+			return sameSet(mcp.Failure, append(slices.Clone(seal.Failure), verify.TimeStampMismatch))
+		},
+		cause: cause{"c2pa-mcp: classifies `timeStamp.mismatch` as a failure", "The claim was changed after signing (the c2pa-rs corpus edits the claim generator), " +
+			"so the claim signature fails and the 1.x `sigTst` token, which covers the claim, no longer matches either (container facts give the token). " +
+			"All three tools report `claimSignature.mismatch` and `timeStamp.mismatch`. c2patool and C2paSeal log `timeStamp.mismatch` as informational, as every " +
+			"time-stamp status is in C2PA 2.4; c2pa-mcp logs it as a failure. The file is Invalid for every tool because of the signature."},
+	},
+	{
+		// Prerelease (pre-1.0) manifests.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			return failSet(seal, verify.Prerelease) && strings.Contains(tool.Err, "Prerelease claim found") &&
+				(mcp.Skipped || failSet(mcp, verify.ClaimSignatureMismatch, verify.AssertionHashedURIMismatch))
+		},
+		cause: cause{"no oracle: c2patool refuses the file", "The store was written before C2PA 1.0: the claim's hash for the first assertion is the SHA-256 of the " +
+			"assertion's payload alone, not of its JUMBF box, the manifest URIs have no leading `/c2pa/` slash, and the COSE signature has trailing data " +
+			"(container facts). c2pa-rs detects the old hashing and refuses to read the store (`Prerelease claim found`); C2paSeal applies the same test " +
+			"(`verify.IsPrerelease`) and reports the c2pa-rs code for it, `com.adobe.prerelease`, as its one failure (CLAUDE.md rule 3). " +
+			"c2pa-mcp reads the store as current data and reports `claimSignature.mismatch` and `assertion.hashedURI.mismatch`. All three reject the file."},
+	},
+}
+
+// v1StampText explains why c2pa-mcp finds 1.x files with a time-stamp
+// invalid.
+const v1StampText = "The active manifest has a C2PA 1.x claim (`c2pa.claim`) signed PS256, with a 1.x `sigTst` RFC 3161 token from a " +
+	"public TSA (container facts name the signer and the TSA). For 1.x claims c2pa-rs does not check the time-stamp authority's trust (claim.rs `verify_claim` turns off " +
+	"`verify_timestamp_trust` when `claim.version() == 1`), so c2patool reports `timeStamp.trusted` and uses the token's time; C2paSeal does the same. " +
+	"c2pa-mcp checks the TSA against its anchors on every claim, finds it untrusted and logs `timeStamp.untrusted` as a failure, so the file is Invalid for it."
+
+// v1Stamp: C2paSeal and c2patool agree on a 1.x claim whose time-stamp
+// they both accept without checking the authority, and c2pa-mcp ran.
+func v1Stamp(r *row, seal, tool, mcp outcome) bool {
+	if mcp.Skipped || key(seal) != key(tool) || !slices.Contains(seal.Success, verify.TimeStampTrusted) {
+		return false
+	}
+	b, err := os.ReadFile(r.Item.Path)
+	if err != nil {
+		return false
+	}
+	st, err := c2paseal.ReadBytes(b)
+	return err == nil && st.Active.Claim.Version == 1
 }
 
 func explain(r *row, m mode) *cause {

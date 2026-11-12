@@ -31,7 +31,7 @@ func TestRunUsage(t *testing.T) {
 		{"no args", nil},
 		{"unknown command", []string{"frobnicate"}},
 		{"verify without file", []string{"verify"}},
-		{"verify two files", []string{"verify", "a.jpg", "b.jpg"}},
+		{"verify --manifest with several files", []string{"verify", "--manifest", "x.c2pa", "a.jpg", "b.jpg"}},
 		{"verify bad flag", []string{"verify", "-nope", "a.jpg"}},
 		{"inspect without file", []string{"inspect"}},
 		{"missing trust file", []string{"verify", "--trust", "does-not-exist.pem", "a.jpg"}},

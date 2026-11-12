@@ -31,6 +31,12 @@ func TestRoundTripFixtures(t *testing.T) {
 		if err != nil {
 			continue
 		}
+		// Our writer lays segments out as c2pa-rs does. Other writers differ:
+		// Adobe Photoshop puts APP11 after the Exif APP1 and splits the
+		// store at other sizes. Extract still returns their store exactly.
+		if otherWriter[f.String()] {
+			continue
+		}
 		n++
 		t.Run(f.String(), func(t *testing.T) {
 			stripped, err := Strip(b)
@@ -294,4 +300,10 @@ func TestWriteStore(t *testing.T) {
 	if err := WriteStore(file, segs, 8, len(s)-2, []byte{1, 2, 3}); !errors.Is(err, ErrOutOfRange) {
 		t.Errorf("write past store end: %v, want ErrOutOfRange", err)
 	}
+}
+
+// otherWriter lists fixtures written by tools whose APP11 layout differs
+// from c2pa-rs's, so Insert(Strip(f)) cannot reproduce them.
+var otherWriter = map[string]bool{
+	"legacy/ocsp.jpg": true, // Adobe Photoshop 26.9
 }

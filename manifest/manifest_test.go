@@ -1,12 +1,15 @@
 package manifest
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
@@ -54,7 +57,34 @@ func normalize(t *testing.T, v any) any {
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatal(err)
 	}
-	return out
+	return hashesAsBase64(out)
+}
+
+// hashesAsBase64 renders the hash of every hashed-URI map ({"url", "hash"})
+// as base64, as c2patool does even where a file stores it as an array of
+// integers (old c2pa-rs, and JSON assertions).
+func hashesAsBase64(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		if _, ok := x["url"].(string); ok {
+			if list, ok := x["hash"].([]any); ok {
+				b := make([]byte, 0, len(list))
+				for _, n := range list {
+					f, _ := n.(float64)
+					b = append(b, byte(f))
+				}
+				x["hash"] = base64.StdEncoding.EncodeToString(b)
+			}
+		}
+		for k, e := range x {
+			x[k] = hashesAsBase64(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = hashesAsBase64(e)
+		}
+	}
+	return v
 }
 
 // oracleManifest is the per-manifest part of c2patool --detailed output.
@@ -117,6 +147,17 @@ func TestFixtures(t *testing.T) {
 
 func checkClaim(t *testing.T, m *Manifest, want map[string]any) {
 	t.Helper()
+	if v, _ := want["claim_version"].(float64); int(v) != m.Claim.Version {
+		t.Errorf("%s: claim version %d, oracle %v", m.Label, m.Claim.Version, want["claim_version"])
+	}
+	ours := strings.Contains(fmt.Sprint(want["claim_generator_info"]), "c2paseal-fixtures")
+	if ours && m.Claim.ClaimGeneratorInfo.Name() != "c2paseal-fixtures" {
+		t.Errorf("%s: generator name %q", m.Label, m.Claim.ClaimGeneratorInfo.Name())
+	}
+	if m.Claim.Version == 1 {
+		checkClaimV1(t, m, want)
+		return
+	}
 	got := normalize(t, m.Claim).(map[string]any)
 	for _, k := range []string{"instanceID", "claim_generator_info", "signature", "created_assertions", "alg"} {
 		if _, ok := got[k]; !ok {
@@ -130,8 +171,35 @@ func checkClaim(t *testing.T, m *Manifest, want map[string]any) {
 			t.Errorf("%s: claim %q = %v, oracle %v", m.Label, k, v, want[k])
 		}
 	}
-	if m.Claim.ClaimGeneratorInfo.Name() != "c2paseal-fixtures" {
-		t.Errorf("%s: generator name %q", m.Label, m.Claim.ClaimGeneratorInfo.Name())
+}
+
+// checkClaimV1 compares the v1 claim fields with the oracle, under their
+// v1 keys.
+func checkClaimV1(t *testing.T, m *Manifest, want map[string]any) {
+	t.Helper()
+	c := m.Claim
+	got := map[string]any{
+		"claim_generator": c.ClaimGenerator,
+		"signature":       c.Signature,
+		"assertions":      c.V1Assertions,
+		"dc:format":       c.Format,
+		"instanceID":      c.InstanceID,
+	}
+	if c.Title != "" {
+		got["dc:title"] = c.Title
+	}
+	if c.Alg != "" {
+		got["alg"] = c.Alg
+	}
+	if len(c.GeneratorInfoV1) > 0 {
+		got["claim_generator_info"] = c.GeneratorInfoV1
+	} else if l, _ := want["claim_generator_info"].([]any); len(l) > 0 {
+		t.Errorf("%s: no claim_generator_info, oracle %v", m.Label, l)
+	}
+	for k, v := range normalize(t, got).(map[string]any) {
+		if !reflect.DeepEqual(v, want[k]) {
+			t.Errorf("%s: claim %q = %v, oracle %v", m.Label, k, v, want[k])
+		}
 	}
 }
 
@@ -269,6 +337,7 @@ func TestClaimEncodeRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	back.Raw, c.Raw = nil, nil
+	back.Version, c.Version = 0, 0
 	if !reflect.DeepEqual(back, c) {
 		t.Errorf("decode(encode(c)) = %+v, want %+v", back, c)
 	}
@@ -296,7 +365,7 @@ func TestDecodeManifestErrors(t *testing.T) {
 		box  *jumbf.Box
 		want error
 	}{
-		{"v1 claim", superbox("urn:c2pa:1", superbox(LabelClaimV1), sig, as), ErrUnsupportedClaim},
+		{"empty v1 claim box", superbox("urn:c2pa:1", superbox(LabelClaimV1), sig, as), ErrMalformedManifest},
 		{"no claim", superbox("urn:c2pa:1", sig, as), ErrMalformedManifest},
 		{"no signature", superbox("urn:c2pa:1", claimBox, as), ErrMalformedManifest},
 		{"no assertion store", superbox("urn:c2pa:1", claimBox, sig), ErrMalformedManifest},
@@ -315,5 +384,79 @@ func TestDecodeManifestErrors(t *testing.T) {
 	}
 	if _, err := DecodeStore(superbox(LabelStore)); !errors.Is(err, ErrMalformedManifest) {
 		t.Errorf("empty store: %v", err)
+	}
+}
+
+func validClaimV1() map[string]any {
+	return map[string]any{
+		"claim_generator": "make_test_images/0.33.1 c2pa-rs/0.33.1",
+		"claim_generator_info": []any{
+			map[string]any{"name": "make_test_images", "version": "0.33.1"},
+			map[string]any{"name": "c2pa-rs", "version": "0.33.1"},
+		},
+		"signature":  "self#jumbf=c2pa.signature",
+		"assertions": []any{map[string]any{"url": "self#jumbf=c2pa.assertions/c2pa.hash.data", "hash": []byte{1}}},
+		"dc:format":  "image/jpeg",
+		"instanceID": "xmp:iid:1",
+		"alg":        "sha256",
+	}
+}
+
+func TestDecodeClaimV1(t *testing.T) {
+	b := enc(t, validClaimV1())
+	c, err := DecodeClaimV1(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Version != 1 || c.Format != "image/jpeg" || c.ClaimGenerator != "make_test_images/0.33.1 c2pa-rs/0.33.1" ||
+		len(c.GeneratorInfoV1) != 2 || c.ClaimGeneratorInfo.Name() != "make_test_images" || !bytes.Equal(c.Raw, b) {
+		t.Errorf("decoded %+v", c)
+	}
+	if refs := c.Assertions(); len(refs) != 1 || refs[0].URL != "self#jumbf=c2pa.assertions/c2pa.hash.data" {
+		t.Errorf("Assertions() = %+v", refs)
+	}
+
+	// Without claim_generator_info the generator string stands in.
+	noInfo := validClaimV1()
+	delete(noInfo, "claim_generator_info")
+	if c, err := DecodeClaimV1(enc(t, noInfo)); err != nil || c.ClaimGeneratorInfo.Name() != "make_test_images/0.33.1 c2pa-rs/0.33.1" {
+		t.Errorf("no claim_generator_info: %v, %+v", err, c)
+	}
+
+	without := func(k string) []byte {
+		c := validClaimV1()
+		delete(c, k)
+		return enc(t, c)
+	}
+	with := func(k string, v any) []byte {
+		c := validClaimV1()
+		c[k] = v
+		return enc(t, c)
+	}
+	for name, b := range map[string][]byte{
+		"not CBOR":           {0xFF},
+		"not a map":          enc(t, []int{1}),
+		"no claim_generator": without("claim_generator"),
+		"no signature":       without("signature"),
+		"no assertions":      without("assertions"),
+		"no dc:format":       without("dc:format"),
+		"no instanceID":      without("instanceID"),
+		"v2 field":           with("created_assertions", []any{}),
+		"info as a map":      with("claim_generator_info", map[string]any{"name": "x"}),
+		"ref without hash":   with("assertions", []any{map[string]any{"url": "x"}}),
+		"non-text key":       {0xA1, 0x01, 0x02},
+	} {
+		if _, err := DecodeClaimV1(b); !errors.Is(err, ErrMalformedClaim) {
+			t.Errorf("%s: error %v, want ErrMalformedClaim", name, err)
+		}
+	}
+
+	// A manifest with a c2pa.claim box decodes as v1.
+	m, err := DecodeManifest(superbox("urn:uuid:1",
+		superbox(LabelClaimV1, &jumbf.Box{Type: "cbor", Payload: b}),
+		superbox(LabelSignature, &jumbf.Box{Type: "cbor"}),
+		superbox(LabelAssertions)))
+	if err != nil || m.Claim.Version != 1 {
+		t.Errorf("v1 manifest: %v", err)
 	}
 }

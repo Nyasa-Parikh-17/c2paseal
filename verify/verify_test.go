@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/sha256"
@@ -26,23 +27,73 @@ import (
 
 // tsa returns a test time-stamping certificate issued by the test root.
 func tsa(t *testing.T) (*x509.Certificate, crypto.Signer) {
+	return tsaValid(t, t0.AddDate(-1, 0, 0), t0.AddDate(3, 0, 0))
+}
+
+// tsaValid returns a test time-stamping certificate valid in [from, to].
+func tsaValid(t *testing.T, from, to time.Time) (*x509.Certificate, crypto.Signer) {
 	t.Helper()
 	root, rootKey := ca(t)
 	key := newKey(t)
 	cert := create(t, &x509.Certificate{
 		Subject:     pkix.Name{CommonName: "Test TSA", Organization: []string{"Test"}},
-		NotBefore:   t0.AddDate(-1, 0, 0),
-		NotAfter:    t0.AddDate(3, 0, 0),
+		NotBefore:   from,
+		NotAfter:    to,
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 	}, root, &key.PublicKey, rootKey)
 	return cert, key
 }
 
-// token makes an RFC 3161 token over data's SHA-256 at time at.
-func token(t *testing.T, data []byte, at time.Time) []byte {
+// tsaOpts changes how token makes a token.
+type tsaOpts struct {
+	cert        *x509.Certificate // with key; default tsa(t)
+	key         crypto.Signer
+	signingTime *time.Time              // CMS signingTime attribute; nil: none
+	noCerts     bool                    // leave the certificates out
+	noAttrs     bool                    // no signed attributes: sign the TSTInfo itself
+	noDigest    bool                    // signed attributes without messageDigest
+	badDigest   bool                    // messageDigest that does not match the TSTInfo
+	wrongSID    bool                    // signer identifier names no embedded certificate
+	digitorus   bool                    // make the token with digitorus/timestamp instead
+	mutate      func(tok []byte) []byte // applied to the finished token
+	v1          bool                    // stamped: a v1 claim with a sigTst header
+}
+
+var (
+	oidSHA256        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
+	oidECDSAWithSHA2 = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}
+	oidContentType   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 3}
+	oidTSTInfo       = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4}
+)
+
+// token makes an RFC 3161 token over data's SHA-256 with genTime at.
+func token(t *testing.T, data []byte, at time.Time, opts ...tsaOpts) []byte {
 	t.Helper()
-	cert, key := tsa(t)
+	var o tsaOpts
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	cert, key := o.cert, o.key
+	if cert == nil {
+		cert, key = tsa(t)
+	}
+	var tok []byte
+	if o.digitorus {
+		tok = digitorusToken(t, cert, key, data, at)
+	} else {
+		tok = buildToken(t, cert, key, data, at, o)
+	}
+	if o.mutate != nil {
+		return o.mutate(bytes.Clone(tok))
+	}
+	return tok
+}
+
+// digitorusToken makes a token with digitorus/timestamp, independently of
+// buildToken. Its CMS signingTime is the real current time.
+func digitorusToken(t *testing.T, cert *x509.Certificate, key crypto.Signer, data []byte, at time.Time) []byte {
+	t.Helper()
 	sum := sha256.Sum256(data)
 	ts := timestamp.Timestamp{
 		HashAlgorithm:     crypto.SHA256,
@@ -63,11 +114,116 @@ func token(t *testing.T, data []byte, at time.Time) []byte {
 	return parsed.RawToken
 }
 
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := asn1.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// buildToken writes a CMS SignedData time-stamp token by hand (ECDSA
+// P-256, SHA-256), so tests control every field.
+func buildToken(t *testing.T, cert *x509.Certificate, key crypto.Signer, data []byte, at time.Time, o tsaOpts) []byte {
+	t.Helper()
+	sum := sha256.Sum256(data)
+	info := mustMarshal(t, tstInfo{
+		Version:        1,
+		Policy:         asn1.ObjectIdentifier{1, 2, 3, 4, 1},
+		MessageImprint: messageImprint{HashAlgorithm: pkix.AlgorithmIdentifier{Algorithm: oidSHA256}, HashedMessage: sum[:]},
+		SerialNumber:   big.NewInt(42),
+		Time:           at.UTC(),
+	})
+
+	type attr struct {
+		Type   asn1.ObjectIdentifier
+		Values []asn1.RawValue `asn1:"set"`
+	}
+	value := func(v any) asn1.RawValue { return asn1.RawValue{FullBytes: mustMarshal(t, v)} }
+	var attrs []byte
+	if !o.noAttrs {
+		attrs = append(attrs, mustMarshal(t, attr{oidContentType, []asn1.RawValue{value(oidTSTInfo)}})...)
+		if !o.noDigest {
+			md := sha256.Sum256(info)
+			if o.badDigest {
+				md[0] ^= 1
+			}
+			attrs = append(attrs, mustMarshal(t, attr{oidMessageDigest, []asn1.RawValue{value(md[:])}})...)
+		}
+		if o.signingTime != nil {
+			attrs = append(attrs, mustMarshal(t, attr{oidSigningTime, []asn1.RawValue{value(o.signingTime.UTC())}})...)
+		}
+	}
+	tbs := info
+	var signedAttrs asn1.RawValue
+	if !o.noAttrs {
+		tbs = mustMarshal(t, asn1.RawValue{Class: asn1.ClassUniversal, Tag: asn1.TagSet, IsCompound: true, Bytes: attrs})
+		signedAttrs = asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: attrs}
+	}
+	h := sha256.Sum256(tbs)
+	sig, err := key.Sign(rand.Reader, h[:], crypto.SHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serial := new(big.Int).Set(cert.SerialNumber)
+	if o.wrongSID {
+		serial.Add(serial, big.NewInt(1000))
+	}
+	type sInfo struct {
+		Version            int
+		SID                issuerAndSerial
+		DigestAlgorithm    pkix.AlgorithmIdentifier
+		SignedAttrs        asn1.RawValue `asn1:"optional"`
+		SignatureAlgorithm pkix.AlgorithmIdentifier
+		Signature          []byte
+	}
+	si := sInfo{
+		Version:            1,
+		SID:                issuerAndSerial{Issuer: asn1.RawValue{FullBytes: cert.RawIssuer}, Serial: serial},
+		DigestAlgorithm:    pkix.AlgorithmIdentifier{Algorithm: oidSHA256},
+		SignedAttrs:        signedAttrs,
+		SignatureAlgorithm: pkix.AlgorithmIdentifier{Algorithm: oidECDSAWithSHA2},
+		Signature:          sig,
+	}
+	// Explicit [0] wrappers are written by hand: encoding/asn1 does not add
+	// them around a RawValue.
+	explicit0 := func(inner []byte) asn1.RawValue {
+		return asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: inner}
+	}
+	type encap struct {
+		EContentType asn1.ObjectIdentifier
+		EContent     asn1.RawValue
+	}
+	type sData struct {
+		Version          int
+		DigestAlgorithms []pkix.AlgorithmIdentifier `asn1:"set"`
+		EncapContent     encap
+		Certificates     asn1.RawValue `asn1:"optional"`
+		SignerInfos      []sInfo       `asn1:"set"`
+	}
+	sd := sData{
+		Version:          3,
+		DigestAlgorithms: []pkix.AlgorithmIdentifier{{Algorithm: oidSHA256}},
+		EncapContent:     encap{oidTSTInfo, explicit0(mustMarshal(t, info))},
+		SignerInfos:      []sInfo{si},
+	}
+	if !o.noCerts {
+		sd.Certificates = asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: cert.Raw}
+	}
+	return mustMarshal(t, struct {
+		ContentType asn1.ObjectIdentifier
+		Content     asn1.RawValue
+	}{oidSignedData, explicit0(mustMarshal(t, sd))})
+}
+
 // stamped signs claimBytes like signedManifest and adds a sigTst2 header
 // holding the given tokens, plus (if overRealData) one made over the real
 // countersignature data.
-func stamped(t *testing.T, leaf *x509.Certificate, key crypto.Signer, at time.Time, tokens [][]byte, overRealData bool) *manifest.Manifest {
+func stamped(t *testing.T, leaf *x509.Certificate, key crypto.Signer, at time.Time, tokens [][]byte, overRealData bool, opts ...tsaOpts) *manifest.Manifest {
 	t.Helper()
+	v1 := len(opts) > 0 && opts[0].v1
 	signer, err := gocose.NewSigner(gocose.AlgorithmES256, key)
 	if err != nil {
 		t.Fatal(err)
@@ -89,15 +245,22 @@ func stamped(t *testing.T, leaf *x509.Certificate, key crypto.Signer, at time.Ti
 		if err := cbormode.Dec.Unmarshal(protected, &raw); err != nil {
 			t.Fatal(err)
 		}
-		sigBstr, _ := cbormode.Enc.Marshal(msg.Signature)
-		tbs, _ := cbormode.Enc.Marshal([]any{"CounterSignature", raw, []byte{}, sigBstr})
-		tokens = append(tokens, token(t, tbs, at))
+		data, _ := cbormode.Enc.Marshal(msg.Signature)
+		if v1 { // sigTst covers the claim itself
+			data = claimBytes
+		}
+		tbs, _ := cbormode.Enc.Marshal([]any{"CounterSignature", raw, []byte{}, data})
+		tokens = append(tokens, token(t, tbs, at, opts...))
 	}
 	var list []any
 	for _, tok := range tokens {
 		list = append(list, map[string]any{"val": tok})
 	}
-	msg.Headers.Unprotected["sigTst2"] = map[string]any{"tstTokens": list}
+	header := "sigTst2"
+	if v1 {
+		header = "sigTst"
+	}
+	msg.Headers.Unprotected[header] = map[string]any{"tstTokens": list}
 	b, err := msg.MarshalCBOR()
 	if err != nil {
 		t.Fatal(err)
@@ -107,11 +270,15 @@ func stamped(t *testing.T, leaf *x509.Certificate, key crypto.Signer, at time.Ti
 		t.Fatal(err)
 	}
 	const label = "urn:c2pa:3fa85f64-5717-4562-b3fc-2c963f66afa6"
-	return &manifest.Manifest{
+	m := &manifest.Manifest{
 		Label:     label,
 		Claim:     &manifest.Claim{Signature: "self#jumbf=/c2pa/" + label + "/c2pa.signature", Raw: claimBytes},
 		Signature: s,
 	}
+	if v1 {
+		m.Claim.Version = 1
+	}
+	return m
 }
 
 // TestTimeStamp: a valid, trusted time-stamp's time is used for the signer
@@ -125,6 +292,9 @@ func TestTimeStamp(t *testing.T) {
 	later := func() time.Time { return t0.AddDate(2, 0, 0) } // signer expired by now
 	trustAll := &Options{TrustAnchors: []*x509.Certificate{root}, Now: later}
 	trustNone := &Options{Now: later}
+	farFuture := t0.AddDate(5, 0, 0)
+	now := time.Now()
+	nowTSA, nowTSAKey := tsaValid(t, now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0))
 
 	tests := []struct {
 		name string
@@ -144,12 +314,57 @@ func TestTimeStamp(t *testing.T) {
 			[]string{TimeStampMalformed, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
 		{"TSA cert expired at stamp time", stamped(t, leaf, key, t0.AddDate(5, 0, 0), nil, true), trustAll,
 			[]string{TimeStampOutsideValidity, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+
+		// The CMS signingTime attribute takes the place of genTime.
+		{"signingTime inside, genTime outside", stamped(t, leaf, key, t0.AddDate(5, 0, 0), nil, true, tsaOpts{signingTime: &stampTime}), trustAll,
+			[]string{TimeStampValidated, TimeStampTrusted, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"signingTime outside, genTime inside", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{signingTime: &farFuture}), trustAll,
+			[]string{TimeStampOutsideValidity, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+
+		// A CMS signature that does not verify is untrusted, not malformed.
+		{"bad CMS signature", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{mutate: flipLast}), trustAll,
+			[]string{TimeStampUntrusted, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"no certificates", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{noCerts: true}), trustAll,
+			[]string{TimeStampUntrusted, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"messageDigest mismatch", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{badDigest: true}), trustAll,
+			[]string{TimeStampMismatch, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"no messageDigest", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{noDigest: true}), trustAll,
+			[]string{TimeStampMalformed, SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"no signed attributes", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{noAttrs: true}), trustAll,
+			[]string{TimeStampValidated, TimeStampTrusted, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		// c2pa-rs logs nothing when no SignerInfo names an embedded certificate.
+		{"signer certificate not embedded", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{wrongSID: true}), trustAll,
+			[]string{SigningCredentialExpired, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+		{"TimeStampResp instead of a token", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{mutate: asResponse}), trustAll,
+			[]string{TimeStampValidated, TimeStampTrusted, SigningCredentialTrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+
+		// v1 claims (sigTst): the authority's trust is not checked.
+		{"v1, untrusted TSA", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{v1: true}), trustNone,
+			[]string{TimeStampValidated, TimeStampTrusted, SigningCredentialUntrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
+
+		// A digitorus/timestamp token, whose signingTime is the real time.
+		{"digitorus token", stamped(t, leaf, key, stampTime, nil, true, tsaOpts{digitorus: true, cert: nowTSA, key: nowTSAKey}), trustNone,
+			[]string{TimeStampValidated, TimeStampUntrusted, SigningCredentialExpired, SigningCredentialUntrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
 	}
 	for _, tt := range tests {
 		if got := codes(checkClaim(tt.m, tt.opts)); !slices.Equal(got, tt.want) {
 			t.Errorf("%s:\n got  %q\n want %q", tt.name, got, tt.want)
 		}
 	}
+}
+
+func flipLast(b []byte) []byte { b[len(b)-1] ^= 1; return b }
+
+// asResponse wraps a token in a granted TimeStampResp.
+func asResponse(tok []byte) []byte {
+	b, err := asn1.Marshal(struct {
+		Status struct{ Status int }
+		Token  asn1.RawValue
+	}{Token: asn1.RawValue{FullBytes: tok}})
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // assertionBox builds an assertion superbox with a CBOR content box.

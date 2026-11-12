@@ -1,0 +1,352 @@
+{
+  "active_manifest": "adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19",
+  "manifests": {
+    "urn:uuid:83875007-1e81-4027-847f-4137f13027db": {
+      "claim": {
+        "claim_generator": "Adobe_Firefly adobe_c2pa/0.12.4+sven2 c2pa-rs/0.32.7",
+        "claim_generator_info": [],
+        "signature": "self#jumbf=c2pa.signature",
+        "assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+            "hash": "4arwWEXujMZWkXjaf6Pa+ZJvsn6DAkW/Au0ZX9abuyg="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.actions",
+            "hash": "flxVHnzsgNyMF9Ay78H38KrSrTlRW95yo5uvZZgzUCY="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.hash.data",
+            "hash": "eKx0DxhAYTU9lYKHogRj9F9CensJA9g4KYcRUvGYobU="
+          }
+        ],
+        "dc:format": "image/jpeg",
+        "instanceID": "xmp:iid:3484f2ef-2a95-46b9-b53d-8aac77469514",
+        "dc:title": "Generated image",
+        "alg": "sha256",
+        "claim_version": 1
+      },
+      "assertion_store": {
+        "c2pa.hash.data": {
+          "exclusions": [
+            {
+              "start": 20,
+              "length": 160805
+            }
+          ],
+          "name": "jumbf manifest",
+          "alg": "sha256",
+          "hash": "UnW4waM3uneVRWDBH5uj3aMzkjCTrXWv7+CjaPAOV+8=",
+          "pad": "AAAAAAAAAA=="
+        },
+        "c2pa.thumbnail.claim.jpeg": "<omitted> len = 147119",
+        "c2pa.actions": {
+          "actions": [
+            {
+              "action": "c2pa.created",
+              "softwareAgent": "Adobe Firefly",
+              "parameters": {
+                "com.adobe.firefly.version": "4.0.0-release-firefly_v4-main_69002.69992",
+                "com.adobe.firefly.operation": "text_to_image"
+              },
+              "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
+            }
+          ]
+        }
+      },
+      "signature": {
+        "alg": "ps256",
+        "issuer": "Adobe Inc.",
+        "common_name": "Adobe Firefly C2PA Stage",
+        "time": "2025-08-13T16:18:11+00:00"
+      }
+    },
+    "adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19": {
+      "claim": {
+        "claim_generator": "Adobe_Photoshop/26.9.0 adobe_c2pa/0.14.2 c2pa-rs/0.43.0",
+        "claim_generator_info": [
+          {
+            "name": "Adobe Photoshop",
+            "version": "26.9.0",
+            "com.adobe.build": "20250724.r.15 b15e8a4 mac"
+          }
+        ],
+        "signature": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+        "assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+            "hash": "ZoTQb1iO5Er2qxQ7e6sG6Xja/jUXIavQlNQ9iXVD7uM="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.ingredient",
+            "hash": "wjd0W6kviPOSI7JqsadYNH7EXWGOpnmRcF9dSK/vMPk="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/stds.schema-org.CreativeWork",
+            "hash": "afTel3/5gX5Xnm2RTRSGYRVbZVnTTZGjnsp6T7cXE/Y="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.actions",
+            "hash": "3PzhovblYjISUxTLYVkfOm5G6LSZgyqDBcVyZqsjgbE="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.hash.data",
+            "hash": "FIdTnuXdgHAETCQPnjvhhXKplENn2WUqxiyKKhxPxTE="
+          }
+        ],
+        "dc:format": "image/jpeg",
+        "instanceID": "xmp:iid:7a40beaa-f4c9-4107-ab26-74e570f5e25c",
+        "dc:title": "ocsp.jpg",
+        "alg": "sha256",
+        "claim_version": 1
+      },
+      "assertion_store": {
+        "stds.schema-org.CreativeWork": {
+          "@context": "https://schema.org",
+          "@type": "CreativeWork",
+          "author": [
+            {
+              "@type": "Person",
+              "name": "Alex Tran",
+              "identifier": "did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+              "credential": [
+                {
+                  "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.credentials/did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+                  "alg": "sha256",
+                  "hash": "FBQtsg55USFQnNW25E8uNpCKPze5WFUDXMuC0gWmVEc="
+                }
+              ]
+            },
+            {
+              "@type": "Person",
+              "identifier": "did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+              "credential": [
+                {
+                  "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.credentials/did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+                  "alg": "sha256",
+                  "hash": "FBQtsg55USFQnNW25E8uNpCKPze5WFUDXMuC0gWmVEc="
+                }
+              ],
+              "name": "Alex Tran",
+              "@id": "https://www.linkedin.com/profile-thirdparty-redirect/AgHguEsABC_4TQAAAZfxDxY_mfoo5DQD7Jonm8khQWXlrininD8Ya7uhWTl-ncZ62V761ov3q1d_y_0mOyWFJ2GQwXNwsgdNxS-ztPrYj_uoLNvGe3Cf9JbVxM6izR4"
+            }
+          ]
+        },
+        "c2pa.hash.data": {
+          "exclusions": [
+            {
+              "start": 82,
+              "length": 256545
+            }
+          ],
+          "name": "jumbf manifest",
+          "alg": "sha256",
+          "hash": "AmN1OPPflhmg7Y1AQQsXKbc6qbsjycVGB40fZXnbtWg=",
+          "pad": "AAAAAAAAAA=="
+        },
+        "c2pa.thumbnail.claim.jpeg": "<omitted> len = 78696",
+        "c2pa.actions": {
+          "actions": [
+            {
+              "action": "c2pa.opened",
+              "parameters": {
+                "com.adobe.tool": "open",
+                "instanceId": "xmp:iid:726ddd55-d57b-4b4e-9c81-d56e6389049d",
+                "com.adobe.icon": "https://cai-assertions.adobe.com/icons/import-dark.svg",
+                "description": "Opened a pre-existing file"
+              },
+              "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia"
+            },
+            {
+              "action": "c2pa.cropped",
+              "parameters": {
+                "com.adobe.tool": "crop",
+                "description": "Used cropping tools, reducing or expanding visible content area",
+                "com.adobe.icon": "https://cai-assertions.adobe.com/icons/crop-dark.svg"
+              }
+            },
+            {
+              "action": "c2pa.edited",
+              "softwareAgent": "Adobe Firefly",
+              "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia"
+            }
+          ],
+          "metadata": {
+            "reviewRatings": [],
+            "dateTime": "2025-08-13T16:28:41.435Z",
+            "localizations": []
+          }
+        },
+        "c2pa.ingredient": {
+          "dc:title": "ocsp.jpg",
+          "dc:format": "image/jpeg",
+          "documentID": "xmp:iid:726ddd55-d57b-4b4e-9c81-d56e6389049d",
+          "instanceID": "xmp:iid:726ddd55-d57b-4b4e-9c81-d56e6389049d",
+          "c2pa_manifest": {
+            "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db",
+            "alg": "sha256",
+            "hash": "plVGVDoDWqVMRVH3s4ntNOKmtDZQLB6h9Gid7rXRkVI="
+          },
+          "validationStatus": [],
+          "relationship": "componentOf",
+          "thumbnail": {
+            "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+            "hash": "4arwWEXujMZWkXjaf6Pa+ZJvsn6DAkW/Au0ZX9abuyg="
+          },
+          "metadata": {
+            "dateTime": "2025-08-13T16:28:47.051Z"
+          }
+        }
+      },
+      "credential_store": [
+        {
+          "type": [
+            "VerifiableCredential"
+          ],
+          "proof": {
+            "created": "2025-08-13T16:29:19.047322125Z",
+            "type": "Ed25519Signature2018",
+            "jws": "f0a947006439e1795aa232d04e3376375c5b07e2d8eb8a4c54823c1f4bdb7ec1bed05d1a1f900e64601a2dfcdde6599899b336baaec652e644af050458e5a1509",
+            "verificationMethod": "did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+            "proofPurpose": "assertionMethod"
+          },
+          "credentialSubject": {
+            "id": "did:adobe:ff2ee515664208df09319e0ea22a7471a350c0950e5bf0ed024ed68b52af264b9",
+            "name": "Alex Tran"
+          },
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1"
+          ]
+        }
+      ],
+      "signature": {
+        "alg": "ps256",
+        "issuer": "Adobe Inc.",
+        "common_name": "Adobe C2PA",
+        "time": "2025-08-13T16:30:55+00:00"
+      }
+    }
+  },
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+          "explanation": "timestamp message digest matched: Adobe SHA256 ECC256 Timestamp Responder 2025 1"
+        },
+        {
+          "code": "timeStamp.trusted",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+          "explanation": "timestamp cert trusted: Adobe SHA256 ECC256 Timestamp Responder 2025 1"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.ingredient",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.ingredient"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/stds.schema-org.CreativeWork",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/stds.schema-org.CreativeWork"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.actions",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": [
+        {
+          "code": "signingCredential.untrusted",
+          "url": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.signature",
+          "explanation": "signing certificate untrusted"
+        }
+      ]
+    },
+    "ingredientDeltas": [
+      {
+        "ingredientAssertionURI": "self#jumbf=/c2pa/adobe:urn:uuid:f3a46a78-8103-4e04-9f98-abcf03ebab19/c2pa.assertions/c2pa.ingredient",
+        "validationDeltas": {
+          "success": [
+            {
+              "code": "ingredient.manifest.validated",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db",
+              "explanation": "ingredient hash matched"
+            },
+            {
+              "code": "timeStamp.validated",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.signature",
+              "explanation": "timestamp message digest matched: Adobe SHA256 ECC256 Timestamp Responder 2025 1"
+            },
+            {
+              "code": "timeStamp.trusted",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.signature",
+              "explanation": "timestamp cert trusted: Adobe SHA256 ECC256 Timestamp Responder 2025 1"
+            },
+            {
+              "code": "claimSignature.insideValidity",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.signature",
+              "explanation": "claim signature valid"
+            },
+            {
+              "code": "claimSignature.validated",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.signature",
+              "explanation": "claim signature valid"
+            },
+            {
+              "code": "assertion.hashedURI.match",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.assertions/c2pa.thumbnail.claim.jpeg",
+              "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim.jpeg"
+            },
+            {
+              "code": "assertion.hashedURI.match",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.assertions/c2pa.actions",
+              "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions"
+            },
+            {
+              "code": "assertion.hashedURI.match",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.assertions/c2pa.hash.data",
+              "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+            }
+          ],
+          "informational": [],
+          "failure": [
+            {
+              "code": "signingCredential.untrusted",
+              "url": "self#jumbf=/c2pa/urn:uuid:83875007-1e81-4027-847f-4137f13027db/c2pa.signature",
+              "explanation": "signing certificate untrusted"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "validation_state": "Valid"
+}

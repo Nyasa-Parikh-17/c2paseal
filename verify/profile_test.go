@@ -152,9 +152,9 @@ func TestSignatureCases(t *testing.T) {
 		{"expired now, time-stamp inside validity", signedManifest(t, good, key, gocose.AlgorithmES256, claimBytes), &inValidity, afterExpiry, ok},
 		{"time-stamp after expiry", signedManifest(t, good, key, gocose.AlgorithmES256, claimBytes), &pastExpiry, trust,
 			[]string{SigningCredentialExpired, SigningCredentialUntrusted, ClaimSignatureInsideValidity, ClaimSignatureValidated}},
-		{"ES384 unsupported", signedManifest(t, good, key, gocose.AlgorithmES256, claimBytes), nil, trust, nil}, // alg patched below
+		{"RS256 unsupported", signedManifest(t, good, key, gocose.AlgorithmES256, claimBytes), nil, trust, nil}, // alg patched below
 	}
-	tests[5].m.Signature.Alg = -35
+	tests[5].m.Signature.Alg = -257 // RS256: COSE, but not allowed by C2PA
 	tests[5].want = []string{AlgorithmUnsupported, ClaimSignatureMismatch}
 
 	tampered := signedManifest(t, good, key, gocose.AlgorithmES256, claimBytes)

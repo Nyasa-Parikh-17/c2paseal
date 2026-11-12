@@ -1,14 +1,15 @@
 // Command c2paseal inspects, verifies and signs C2PA Content Credentials in
 // JPEG and PNG files, and serves a demo UI.
 //
-//	c2paseal inspect [--json] <file>
-//	c2paseal verify  [--json] [--trust anchors.pem] <file>
+//	c2paseal inspect [--json] [--recursive] <file or folder>...
+//	c2paseal verify  [--json] [--trust anchors.pem] [--recursive] <file or folder>...
 //	c2paseal sign    [--json] --cert chain.pem --key key.pem --in in --out out [--title t] [--source-type uri] [--tsa url]
 //	c2paseal serve   [--addr 127.0.0.1:8080] [--pki testdata/pki]
 //	c2paseal version [--json]
 //
 // Every command accepts -h. With --json, results and errors are JSON on
-// stdout ({"error": "..."} for errors).
+// stdout ({"error": "..."} for errors). Given a folder or several files,
+// inspect and verify write one result per file (JSON Lines with --json).
 //
 // Exit codes: 0 = success / valid manifest; 1 = invalid manifest, unreadable
 // file or failed operation; 2 = usage error, including option files (trust
@@ -48,12 +49,16 @@ func main() {
 const usageText = `c2paseal reads, verifies and signs C2PA Content Credentials in JPEG and PNG files.
 
 usage:
-  c2paseal inspect [--json] <file>
+  c2paseal inspect [--json] [--recursive] <file or folder>...
         print the manifest store as JSON (as c2patool --detailed does);
         a file without an embedded store is read from its .c2pa sidecar
   c2paseal verify [--json] [--trust anchors.pem] [--manifest store.c2pa]
-                  [--fetch-remote] <file>
+                  [--fetch-remote] [--recursive] <file or folder>...
         validate the manifest store and print the C2PA status codes
+
+  Given a folder or several files, inspect and verify write one result per
+  file (JSON Lines with --json; inspect always does) for the folder's JPEG
+  and PNG files, and its subfolders' with --recursive.
   c2paseal sign [--json] --cert chain.pem --key key.pem --in in --out out
                 [--title t] [--source-type uri] [--tsa url]
                 [--no-history] [--remote url] [--sidecar]
@@ -67,8 +72,8 @@ usage:
 Run "c2paseal <command> -h" for a command's flags.
 
 exit codes:
-  0  success, or the manifest is valid
-  1  the manifest is invalid, the file cannot be read, or the operation failed
+  0  success, or the manifest is valid (every manifest, for several files)
+  1  a manifest is invalid, a file cannot be read, or the operation failed
   2  usage error, or an option file (anchors, certificate, key, PKI) cannot be loaded`
 
 func usage(w io.Writer) { fmt.Fprintln(w, usageText) }
@@ -139,37 +144,19 @@ func (c *command) fail(code int, err error) int {
 	return code
 }
 
-// parseFile parses flags that may appear before or after the single file
-// argument and returns it.
-func (c *command) parseFile(args []string) (string, int) {
-	var pos []string
-	for {
-		if err := c.fs.Parse(args); err != nil {
-			return "", c.parseErr(err)
-		}
-		if c.fs.NArg() == 0 {
-			break
-		}
-		pos = append(pos, c.fs.Arg(0))
-		args = c.fs.Args()[1:]
-	}
-	if len(pos) != 1 {
-		fmt.Fprintf(c.stderr, "c2paseal %s: want exactly one file, got %d\n", c.fs.Name(), len(pos))
-		c.fs.Usage()
-		return "", exitUsage
-	}
-	return pos[0], -1
-}
-
 func inspect(args []string, stdout, stderr io.Writer) int {
-	c := newCommand("inspect", "[--json] <file>", stdout, stderr).
+	c := newCommand("inspect", "[--json] [--recursive] <file or folder>...", stdout, stderr).
 		withJSON("accepted for consistency; inspect always prints JSON")
-	file, code := c.parseFile(args)
+	recursive := c.fs.Bool("recursive", false, "with a folder, include its subfolders")
+	paths, code := c.parsePaths(args)
 	if code >= 0 {
 		return code
 	}
 	*c.asJSON = true // errors as JSON too
-	s, err := c2paseal.Read(file)
+	if batchMode(paths) {
+		return inspectBatch(expand(paths, *recursive), stdout, stderr)
+	}
+	s, err := c2paseal.Read(paths[0])
 	if err != nil {
 		return c.fail(exitInvalid, err)
 	}
@@ -177,14 +164,19 @@ func inspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func verifyCmd(args []string, stdout, stderr io.Writer) int {
-	c := newCommand("verify", "[--json] [--trust anchors.pem] [--manifest store.c2pa] [--fetch-remote] <file>", stdout, stderr).
-		withJSON("print validation results as JSON")
+	c := newCommand("verify", "[--json] [--trust anchors.pem] [--manifest store.c2pa] [--fetch-remote] [--recursive] <file or folder>...", stdout, stderr).
+		withJSON("print validation results as JSON (one object per line for several files)")
 	trust := c.fs.String("trust", "", "PEM file of trust anchor certificates (default: none, so every signer is untrusted)")
 	store := c.fs.String("manifest", "", "manifest store kept outside the file (default: the embedded store, else <file>.c2pa next to it)")
 	fetch := c.fs.Bool("fetch-remote", false, "download the manifest store the file's XMP references if it has no embedded or sidecar store (needs network)")
-	file, code := c.parseFile(args)
+	recursive := c.fs.Bool("recursive", false, "with a folder, include its subfolders")
+	paths, code := c.parsePaths(args)
 	if code >= 0 {
 		return code
+	}
+	batch := batchMode(paths)
+	if batch && *store != "" {
+		return c.fail(exitUsage, errors.New("c2paseal verify: --manifest applies to a single file"))
 	}
 	opts := &c2paseal.VerifyOptions{FetchRemote: *fetch}
 	if *store != "" {
@@ -201,8 +193,11 @@ func verifyCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		opts.TrustAnchors = anchors
 	}
+	if batch {
+		return verifyBatch(expand(paths, *recursive), opts, *c.asJSON, stdout, stderr)
+	}
 
-	r := c2paseal.VerifyFile(file, opts)
+	r := c2paseal.VerifyFile(paths[0], opts)
 	state := r.State()
 	if *c.asJSON {
 		if code := writeJSON(stdout, stderr, struct {

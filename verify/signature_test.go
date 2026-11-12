@@ -133,7 +133,10 @@ func TestOracle(t *testing.T) {
 			n++
 			t.Run(f.String()+"/"+mode, func(t *testing.T) {
 				m := activeManifest(t, f)
-				got := group(Signature(m, nil, opts))
+				// A valid, trusted time-stamp (always so for v1 claims) sets the
+				// time for the credential checks, as in checkClaim.
+				_, at := timeStamp(m, opts)
+				got := group(Signature(m, at, opts))
 				want := oracleGroup(exp.ValidationResults.ActiveManifest)
 				if !slices.Equal(got, want) {
 					t.Errorf("statuses\n got  %q\n want %q", got, want)

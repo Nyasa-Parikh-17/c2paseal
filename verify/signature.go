@@ -12,7 +12,6 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/cbormode"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/cose"
-	gocose "github.com/veraison/go-cose"
 )
 
 // Options configures verification.
@@ -69,7 +68,8 @@ func refChecks(m *manifest.Manifest) []Status {
 	if !signatureRefOK(m) {
 		out = append(out, Status{ClaimSignatureMissing, SignatureURL(m), "signature missing"})
 	}
-	if !manifestLabel.MatchString(m.Label) {
+	// Only v2 claims need a urn:c2pa: label; 1.x used urn:uuid:.
+	if m.Claim.Version != 1 && !manifestLabel.MatchString(m.Label) {
 		out = append(out, Status{ClaimMalformed, ManifestURL(m.Label), "claim box label invalid"})
 	}
 	return out
@@ -92,11 +92,11 @@ func credentials(m *manifest.Manifest, signingTime *time.Time, opts *Options) []
 	if s == nil {
 		return mismatch()
 	}
-	if s.Alg != cose.AlgES256 {
+	if _, ok := coseAlgs[s.Alg]; !ok {
 		add(AlgorithmUnsupported, "unsupported or missing Cose algorithm")
 		return mismatch()
 	}
-	if isDERSignature(s.Signature) {
+	if isEC(s.Alg) && isDERSignature(s.Signature) {
 		add(SigningCredentialInvalid, "unsupported signature format (EC signature should be in P1363 r|s format)")
 		return mismatch()
 	}
@@ -198,15 +198,12 @@ func trusted(leaf *x509.Certificate, chain []*x509.Certificate, signingTime *tim
 }
 
 // validSignature rebuilds the COSE Sig_structure over the original claim
-// bytes and verifies the ES256 signature with the signer's key.
+// bytes and verifies the signature with the signer's key.
 func validSignature(s *cose.Sign1, claim []byte, leaf *x509.Certificate) bool {
 	tbs, err := cbormode.Enc.Marshal([]any{"Signature1", s.Protected, []byte{}, claim})
 	if err != nil {
 		return false
 	}
-	v, err := gocose.NewVerifier(gocose.AlgorithmES256, leaf.PublicKey)
-	if err != nil {
-		return false
-	}
-	return v.Verify(tbs, s.Signature) == nil
+	pub, _ := publicKey(leaf)
+	return verifyCOSE(s.Alg, pub, tbs, s.Signature) == nil
 }

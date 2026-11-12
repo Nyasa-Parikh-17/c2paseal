@@ -44,10 +44,15 @@ func TestDecode(t *testing.T) {
 		}
 	}
 
-	// Single-certificate x5chain in the unprotected header (C2PA 1.x style).
-	s, err := Decode(message(t, map[any]any{HeaderAlg: AlgES256}, map[any]any{HeaderX5Chain: cert}, true))
+	// Single-certificate x5chain in the unprotected header under the text
+	// label (C2PA 1.x style), and the text label in the protected header.
+	s, err := Decode(message(t, map[any]any{HeaderAlg: AlgES256}, map[any]any{"x5chain": cert}, true))
 	if err != nil || len(s.X5Chain) != 1 {
 		t.Errorf("unprotected x5chain: %v, %+v", err, s)
+	}
+	s, err = Decode(message(t, map[any]any{HeaderAlg: AlgES256, "x5chain": []any{cert, cert}}, nil, true))
+	if err != nil || len(s.X5Chain) != 2 {
+		t.Errorf("protected text x5chain: %v, %+v", err, s)
 	}
 }
 
@@ -66,7 +71,10 @@ func TestDecodeErrors(t *testing.T) {
 		"x5chain int":       message(t, map[any]any{HeaderAlg: AlgES256, HeaderX5Chain: 5}, nil, true),
 		"x5chain bad entry": message(t, map[any]any{HeaderAlg: AlgES256, HeaderX5Chain: []any{"x"}}, nil, true),
 		"bad sigTst2":       message(t, ok, map[any]any{HeaderSigTst2: "x"}, true),
-		"sigTst2 no val":    message(t, ok, map[any]any{HeaderSigTst2: map[string]any{"tstTokens": []any{map[string]any{}}}}, true),
+		// c2pa-rs reads the unprotected header only under the text label.
+		"unprotected label 33": message(t, map[any]any{HeaderAlg: AlgES256}, map[any]any{HeaderX5Chain: cert}, true),
+		"x5chain twice":        message(t, ok, map[any]any{"x5chain": cert}, true),
+		"sigTst2 no val":       message(t, ok, map[any]any{HeaderSigTst2: map[string]any{"tstTokens": []any{map[string]any{}}}}, true),
 	}
 	for name, b := range tests {
 		if _, err := Decode(b); !errors.Is(err, ErrMalformed) {

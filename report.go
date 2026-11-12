@@ -1,7 +1,9 @@
 package c2paseal
 
 import (
+	"bytes"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -10,7 +12,7 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/cbormode"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/cose"
-	"github.com/digitorus/timestamp"
+	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
 // The JSON report mirrors `c2patool <file> --detailed` (c2pa-rs
@@ -22,9 +24,10 @@ type storeReport struct {
 }
 
 type manifestReport struct {
-	Claim          map[string]any  `json:"claim"`
-	AssertionStore map[string]any  `json:"assertion_store"`
-	Signature      signatureReport `json:"signature"`
+	Claim           map[string]any  `json:"claim"`
+	AssertionStore  map[string]any  `json:"assertion_store"`
+	CredentialStore []any           `json:"credential_store,omitempty"` // 1.x verifiable credentials
+	Signature       signatureReport `json:"signature"`
 }
 
 type signatureReport struct {
@@ -53,7 +56,10 @@ func reportManifest(m *manifest.Manifest) (manifestReport, error) {
 	if err := cbormode.Dec.Unmarshal(m.Claim.Raw, &claim); err != nil {
 		return manifestReport{}, err
 	}
-	claim["claim_version"] = 2
+	claim["claim_version"] = m.Claim.Version
+	if m.Claim.Version == 1 && claim["claim_generator_info"] == nil {
+		claim["claim_generator_info"] = []any{} // c2pa-rs prints an absent list as []
+	}
 
 	store := map[string]any{}
 	for _, a := range m.Assertions {
@@ -63,7 +69,79 @@ func reportManifest(m *manifest.Manifest) (manifestReport, error) {
 		}
 		store[a.Label] = v
 	}
-	return manifestReport{Claim: claim, AssertionStore: store, Signature: reportSignature(m.Signature)}, nil
+	r := manifestReport{Claim: claim, AssertionStore: store, Signature: reportSignature(m)}
+	// C2PA 1.x verifiable credentials store: one JSON credential per box.
+	if vcs := m.Box.Child(labelCredentials); vcs != nil {
+		for _, b := range vcs.Contents() {
+			if !b.IsSuperbox() {
+				continue
+			}
+			if c := b.Contents(); len(c) == 1 && c[0].Type == "json" {
+				var v any
+				if err := json.Unmarshal(c[0].Payload, &v); err != nil {
+					return manifestReport{}, fmt.Errorf("credential %q: %w", b.Label(), err)
+				}
+				r.CredentialStore = append(r.CredentialStore, v)
+			}
+		}
+	}
+	return r, nil
+}
+
+// labelCredentials is the C2PA 1.x verifiable credentials store box.
+const labelCredentials = "c2pa.credentials"
+
+// hashesAsBase64 renders the hash of each hashed-URI map ({"url", "hash"})
+// as base64, as c2patool does where a file stores it as an array of
+// integers (older c2pa-rs, and JSON assertions).
+func hashesAsBase64(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		if _, ok := x["url"].(string); ok {
+			if b, ok := byteArray(x["hash"]); ok {
+				x["hash"] = base64.StdEncoding.EncodeToString(b)
+			}
+		}
+		for k, e := range x {
+			x[k] = hashesAsBase64(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = hashesAsBase64(e)
+		}
+	}
+	return v
+}
+
+// byteArray reads a non-empty array of integers 0-255.
+func byteArray(v any) ([]byte, bool) {
+	list, ok := v.([]any)
+	if !ok || len(list) == 0 {
+		return nil, false
+	}
+	out := make([]byte, 0, len(list))
+	for _, e := range list {
+		var n int64
+		switch x := e.(type) {
+		case uint64:
+			n = int64(min(x, 256))
+		case int64:
+			n = x
+		case json.Number:
+			i, err := x.Int64()
+			if err != nil {
+				return nil, false
+			}
+			n = i
+		default:
+			return nil, false
+		}
+		if n < 0 || n > 255 {
+			return nil, false
+		}
+		out = append(out, byte(n))
+	}
+	return out, true
 }
 
 // assertionValue renders an assertion's content the way c2pa-rs does: CBOR
@@ -77,9 +155,15 @@ func assertionValue(box *jumbf.Box) (any, error) {
 	case "cbor":
 		var v any
 		err := cbormode.Dec.Unmarshal(c[0].Payload, &v)
-		return v, err
+		return hashesAsBase64(v), err
 	case "json":
-		return json.RawMessage(c[0].Payload), nil
+		d := json.NewDecoder(bytes.NewReader(c[0].Payload))
+		d.UseNumber()
+		var v any
+		if err := d.Decode(&v); err != nil {
+			return nil, err
+		}
+		return hashesAsBase64(v), nil
 	case "bfdb":
 		if len(c) == 2 && c[1].Type == "bidb" {
 			return fmt.Sprintf("<omitted> len = %d", len(c[1].Payload)), nil
@@ -88,7 +172,8 @@ func assertionValue(box *jumbf.Box) (any, error) {
 	return nil, nil
 }
 
-func reportSignature(s *cose.Sign1) signatureReport {
+func reportSignature(m *manifest.Manifest) signatureReport {
+	s := m.Signature
 	if s == nil {
 		return signatureReport{}
 	}
@@ -101,12 +186,9 @@ func reportSignature(s *cose.Sign1) signatureReport {
 			r.CommonName = &cn
 		}
 	}
-	for _, ts := range s.Timestamps {
-		if t, err := timestamp.Parse(ts.Token); err == nil {
-			str := rfc3339(t.Time)
-			r.Time = &str
-			break
-		}
+	if t, ok := verify.SigningTime(m); ok {
+		str := rfc3339(t)
+		r.Time = &str
 	}
 	return r
 }

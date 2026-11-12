@@ -75,3 +75,37 @@ this directory; the oracle runs with `remote/served/` served on
 
 Tests serve `served/` without a network port (`fixtures.RemoteClient`);
 `go run ./interop` serves it on 127.0.0.1:8765.
+
+## legacy/
+
+C2PA 1.x files (claim v1), generated separately by
+`scripts/make-legacy-fixtures.sh`, which regenerates only this directory.
+
+From the public c2pa-rs test corpus (`sdk/tests/fixtures`, commit
+`f67921a6ee069878d15db9ff601bf5babcefdff6`, each file checked by SHA-256 in
+the script). c2pa-rs is dual-licensed MIT OR Apache-2.0. These are signed
+PS256 by c2pa-rs's own test PKI (or by Adobe for `ocsp.jpg`), so they are
+untrusted in both oracle modes.
+
+| File | What | Oracle result |
+|---|---|---|
+| `C.jpg` | v1, `sigTst` time-stamp (DigiCert) | Valid; `timeStamp.trusted` (c2pa-rs skips TSA trust for v1) |
+| `CA.jpg` | v1 with an ingredient without provenance | Valid; `ingredient.unknownProvenance` |
+| `CACA.jpg` | v2 over a v1 chain, `sigTst2` | Valid; `timeStamp.untrusted` |
+| `CIE-sig-CA.jpg` | v1 whose ingredient's signature was bad when it was added | Valid (the failure is recorded in the ingredient assertion) |
+| `E-sig-CA.jpg` | v1 claim edited after signing | Invalid: `claimSignature.mismatch`, `timeStamp.mismatch` |
+| `XCA.jpg` | v1, image data changed | Invalid: `assertion.dataHash.mismatch` |
+| `adobe-20220124-E-clm-CAICAI.jpg` | c2pa-rs 0.16: text `x5chain` header, ingredient label edited | Invalid: `ingredient.manifest.missing`, `assertion.hashedURI.mismatch` |
+| `legacy_ingredient_hash.jpg` | c2pa-rs 0.16: pre-1.3 ingredient hash over the claim bytes | Valid |
+| `ocsp.jpg` | Adobe Photoshop/Firefly, stapled OCSP responses, 1.x credentials store | Valid |
+| `prerelease.jpg` | pre-1.0 store | c2patool error: Prerelease claim found |
+
+Written by c2patool 0.27.21 with the TEST ONLY PKI and `"claim_version": 1`:
+
+| File | What | Expected state |
+|---|---|---|
+| `v1.jpg`, `v1.png` | v1 claim, ES256, `c2pa.created` | Valid / Trusted |
+| `v1-edited.jpg` | `v1.jpg` re-signed as parent, v1 ingredient | Valid / Trusted |
+
+`cloud.jpg` from the same corpus was left out: its store is only at an Adobe
+URL, so its oracle output would depend on that server.

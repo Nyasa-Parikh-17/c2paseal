@@ -45,6 +45,7 @@ CGO_ENABLED=0 go build -o c2paseal ./cmd/c2paseal
 ./c2paseal verify signed.jpg                                          # state: Valid (signer untrusted)
 ./c2paseal verify --trust testdata/pki/trust-anchors.pem signed.jpg   # state: Trusted
 ./c2paseal inspect signed.jpg                                         # manifest store as JSON
+./c2paseal verify --json --recursive photos/                          # one JSON line per file
 ./c2paseal serve                                                      # demo UI: http://127.0.0.1:8080/
 ```
 
@@ -90,12 +91,13 @@ Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
 |---|---|
 | Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`) |
 | Operations | Read, verify, sign |
-| Signature | ES256 (ECDSA P-256, SHA-256) |
+| Signature | Signing: ES256 (ECDSA P-256, SHA-256). Verifying: also ES384, ES512, PS256, PS384, PS512 and Ed25519 |
+| Claims | Writes claim v2; reads claim v2 and C2PA 1.x claim v1 (`c2pa.claim`) |
 | Hard binding | `c2pa.hash.data` |
 | Assertions written | `c2pa.actions.v2` (`c2pa.created`, or `c2pa.opened` when re-signing, plus later actions), `c2pa.hash.data`, `c2pa.ingredient.v3` for the parent when re-signing, optional `c2pa.thumbnail.claim` |
 | Edit history | Re-signing keeps the earlier manifests byte for byte and records the previous one as the parent ingredient |
 | Manifest location | Embedded, in a `.c2pa` sidecar (`--sidecar`), or at a remote URL referenced from XMP (`--remote`); `verify` finds sidecars itself and fetches remote stores only with `--fetch-remote` |
-| Time-stamps | RFC 3161 `sigTst2`, verified when present, optional when signing |
+| Time-stamps | RFC 3161 `sigTst2` (and 1.x `sigTst`), verified when present, optional when signing; the CMS `signingTime` attribute is used when present, as c2pa-rs does |
 | Specification | C2PA 2.4, pinned in [SPEC.md](SPEC.md) |
 
 ## Limits
@@ -105,10 +107,12 @@ Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
   `signingCredential.untrusted` unless you pass its root as a trust anchor.
   For real use you need a certificate from a CA on the C2PA trust list.
 - **JPEG and PNG only.** No video, BMFF or other formats.
-- **ES256 only**, for signing and for verifying claim signatures.
+- **Signing is ES256 only.** Verifying also accepts ES384, ES512, PS256,
+  PS384, PS512 and Ed25519.
 - **One hard binding:** `c2pa.hash.data`. No soft bindings or watermarks,
-  no OCSP/CRL revocation checks, no C2PA 1.x (claim v1)
-  manifests.
+  no OCSP/CRL revocation checks.
+- C2PA 1.x files are read and verified, not written. Stores written before
+  C2PA 1.0 are refused, as c2patool refuses them.
 - Re-signing keeps the existing manifests and records the previous one as
   the parent ingredient (`--no-history` replaces them instead). Only the
   parent relationship is written; no component ingredients, no ingredient

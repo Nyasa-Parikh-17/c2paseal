@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
@@ -50,6 +51,14 @@ func TestFixtures(t *testing.T) {
 				// The store is in a sidecar or remote file, not in the image.
 				if !errors.Is(err, ErrNoManifest) {
 					t.Errorf("file with an external store: error %v, want ErrNoManifest", err)
+				}
+				return
+			}
+			// c2patool refuses prerelease (pre-1.0) manifests above the container
+			// level; the store itself extracts.
+			if exp.Failed() && strings.Contains(exp.C2patoolError, "Prerelease claim found") {
+				if err != nil {
+					t.Errorf("Extract: %v", err)
 				}
 				return
 			}

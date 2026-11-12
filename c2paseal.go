@@ -1,12 +1,14 @@
 package c2paseal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
+	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
 // Supported file formats.
@@ -17,6 +19,24 @@ const (
 
 // ErrUnsupportedFormat is returned for files that are neither JPEG nor PNG.
 var ErrUnsupportedFormat = asset.ErrUnsupportedFormat
+
+// ErrPrerelease is returned for manifest stores written before C2PA 1.0,
+// which c2pa-rs (and so c2patool) refuses to read.
+var ErrPrerelease = errors.New("c2paseal: prerelease (pre-1.0) manifest store")
+
+// decoded decodes a store and rejects prerelease data.
+func decoded(root *jumbf.Box) ([]*manifest.Manifest, error) {
+	ms, err := manifest.DecodeStore(root)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: %w", err)
+	}
+	for _, m := range ms {
+		if verify.IsPrerelease(m) {
+			return nil, fmt.Errorf("%w: %s", ErrPrerelease, m.Label)
+		}
+	}
+	return ms, nil
+}
 
 // ManifestStore is the decoded C2PA manifest store of a file. Reading does
 // not verify anything; hashed-URI results are recorded in each manifest's
@@ -54,9 +74,9 @@ func ReadStore(store []byte) (*ManifestStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: %w", err)
 	}
-	ms, err := manifest.DecodeStore(root)
+	ms, err := decoded(root)
 	if err != nil {
-		return nil, fmt.Errorf("c2paseal: %w", err)
+		return nil, err
 	}
 	return &ManifestStore{Root: root, Manifests: ms, Active: ms[len(ms)-1]}, nil
 }
@@ -68,9 +88,9 @@ func ReadBytes(b []byte) (*ManifestStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: %w", err)
 	}
-	ms, err := manifest.DecodeStore(root)
+	ms, err := decoded(root)
 	if err != nil {
-		return nil, fmt.Errorf("c2paseal: %w", err)
+		return nil, err
 	}
 	return &ManifestStore{Format: format, Root: root, Manifests: ms, Active: ms[len(ms)-1]}, nil
 }

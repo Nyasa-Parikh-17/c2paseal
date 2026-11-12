@@ -145,7 +145,7 @@ func TestBuildRoundTrip(t *testing.T) {
 				t.Errorf("assertions %q, want %q", labels, want)
 			}
 			acts := m.Assertion("c2pa.actions.v2").Value.(*assertion.Actions)
-			if gotActs, wantActs := normalize(t, acts.Actions), normalize(t, tt.opts.actions()); !reflect.DeepEqual(gotActs, wantActs) {
+			if gotActs, wantActs := normalize(t, acts.Actions), normalize(t, tt.opts.actions(false)); !reflect.DeepEqual(gotActs, wantActs) {
 				t.Errorf("actions %v, want %v", gotActs, wantActs)
 			}
 			dh := m.Assertion("c2pa.hash.data").Value.(*assertion.DataHash)

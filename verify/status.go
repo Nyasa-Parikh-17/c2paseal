@@ -70,6 +70,7 @@ const (
 	AssertionDataHashMalformed        = "assertion.dataHash.malformed"
 	AlgorithmUnsupported              = "algorithm.unsupported"
 	ManifestMissing                   = "manifest.missing"
+	ManifestInaccessible              = "manifest.inaccessible"
 	GeneralError                      = "general.error"
 )
 

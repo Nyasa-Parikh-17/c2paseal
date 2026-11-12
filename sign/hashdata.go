@@ -58,6 +58,41 @@ func encodeHashData(start, length uint64, hash []byte) ([]byte, hashDataLayout) 
 	return b, l
 }
 
+// encodeHashData encodes the manifest's c2pa.hash.data: with one exclusion
+// for an embedded store, or with none for a store kept outside the file
+// (a sidecar or remote store), where the hash covers the whole file.
+func (m *Manifest) encodeHashData(start, length uint64, hash []byte) ([]byte, hashDataLayout) {
+	if m.external {
+		return encodeHashDataExternal(hash)
+	}
+	return encodeHashData(start, length, hash)
+}
+
+// encodeHashDataExternal encodes a c2pa.hash.data assertion without
+// exclusions: {"name": "jumbf manifest", "alg": "sha256", "hash": bstr(32),
+// "pad": empty bstr}. Only the hash is backfilled.
+func encodeHashDataExternal(hash []byte) ([]byte, hashDataLayout) {
+	var b []byte
+	text := func(s string) {
+		b = appendHead(b, 3, uint64(len(s)))
+		b = append(b, s...)
+	}
+	b = appendHead(b, 5, 4)
+	text("name")
+	text("jumbf manifest")
+	text("alg")
+	text("sha256")
+	text("hash")
+	b = appendHead(b, 2, digestLen)
+	l := hashDataLayout{start: -1, length: -1, hash: len(b)}
+	h := make([]byte, digestLen)
+	copy(h, hash)
+	b = append(b, h...)
+	text("pad")
+	b = appendHead(b, 2, 0)
+	return b, l
+}
+
 // appendHead appends a CBOR head with the shortest argument encoding.
 func appendHead(b []byte, major byte, n uint64) []byte {
 	m := major << 5

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/sign"
 )
 
@@ -19,47 +19,81 @@ type SignOptions = sign.Options
 
 // ErrSignFormat is returned when asked to sign a file that is neither JPEG
 // nor PNG.
-var ErrSignFormat = errors.New("c2paseal: signing supports JPEG and PNG only")
+var ErrSignFormat = sign.ErrFormat
 
-// Sign reads the JPEG or PNG at in, embeds a newly signed C2PA manifest store and
-// writes the result to out (atomically, via a temporary file in out's
-// directory). An existing manifest store in the input is replaced.
+// SignedAsset is the result of SignAsset: the signed file and its manifest
+// store.
+type SignedAsset = sign.Signed
+
+// Sign reads the JPEG or PNG at in, signs it and writes the result to out
+// (atomically, via a temporary file in out's directory).
+//
+// If in already has a manifest store, it is kept and recorded as the
+// parent ingredient of the new manifest (SignOptions.NoHistory replaces it
+// instead). With SignOptions.Sidecar the store is not embedded but written
+// next to out, at SidecarPath(out).
 func Sign(in, out string, opts *SignOptions) error {
 	b, err := os.ReadFile(in)
 	if err != nil {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
-	signed, err := SignBytes(b, opts)
+	s, err := SignAsset(b, opts)
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(out), ".c2paseal-*")
+	if err := writeAtomic(out, s.File); err != nil {
+		return err
+	}
+	if opts.Sidecar {
+		return writeAtomic(SidecarPath(out), s.Store)
+	}
+	return nil
+}
+
+// SignBytes is Sign for a file already in memory. It returns only the
+// signed file, so it rejects SignOptions.Sidecar; use SignAsset for that.
+func SignBytes(b []byte, opts *SignOptions) ([]byte, error) {
+	if opts != nil && opts.Sidecar {
+		return nil, sign.ErrSidecar
+	}
+	s, err := SignAsset(b, opts)
+	if err != nil {
+		return nil, err
+	}
+	return s.File, nil
+}
+
+// SignAsset signs a JPEG or PNG held in memory and returns the signed file
+// and its manifest store (embedded in the file, or, with
+// SignOptions.Sidecar, to be saved as a sidecar or served at
+// SignOptions.RemoteURL).
+func SignAsset(b []byte, opts *SignOptions) (*SignedAsset, error) {
+	return sign.Asset(b, opts)
+}
+
+// SidecarPath returns where a file's sidecar manifest store goes: the same
+// path with the extension .c2pa (C2PA 2.4 §15.5.3.1).
+func SidecarPath(path string) string {
+	return strings.TrimSuffix(path, filepath.Ext(path)) + ".c2pa"
+}
+
+func writeAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".c2paseal-*")
 	if err != nil {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(signed); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return fmt.Errorf("c2paseal: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
-	if err := os.Rename(tmp.Name(), out); err != nil {
+	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
 	return nil
-}
-
-// SignBytes is Sign for a file already in memory.
-func SignBytes(b []byte, opts *SignOptions) ([]byte, error) {
-	switch asset.Detect(b) {
-	case asset.JPEG:
-		return sign.JPEG(b, opts)
-	case asset.PNG:
-		return sign.PNG(b, opts)
-	}
-	return nil, ErrSignFormat
 }
 
 // LoadSigner reads a PEM certificate chain (signer first, then

@@ -114,6 +114,19 @@ func TestCorpus(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// External stores: a sidecar is passed in; a remote-only
+				// store is fetched, from testdata/remote/served.
+				if f.SidecarPath != "" {
+					if opts.ManifestStore, err = f.ExternalStore(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if f.ServedPath != "" {
+					opts.FetchRemote = true
+					if opts.HTTPClient, err = fixtures.RemoteClient(); err != nil {
+						t.Fatal(err)
+					}
+				}
 				r := File(b, opts)
 				got := render(r.ActiveManifest)
 

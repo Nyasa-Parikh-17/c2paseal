@@ -18,6 +18,13 @@ import (
 )
 
 func extract(f fixtures.Fixture) (*jumbf.Box, error) {
+	if f.External() {
+		store, err := f.ExternalStore()
+		if err != nil {
+			return nil, err
+		}
+		return jumbf.Parse(store)
+	}
 	b, err := os.ReadFile(f.Path)
 	if err != nil {
 		return nil, err

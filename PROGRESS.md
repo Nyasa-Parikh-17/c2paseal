@@ -18,9 +18,13 @@ Scope-creep ideas go here instead of being built.
 - Legacy (pre-1.3) ingredient manifest hash fallback; redacted ingredients.
 - OCSP / revocation; allowed end-entity lists; BMFF, boxes and collection
   hard bindings.
+- Remote manifests: HTTP `Link: rel=c2pa-manifest` discovery (§15.5.3.2);
+  extended XMP for packets over 64 KB in JPEG; re-signing a file whose
+  only store is a sidecar or remote one (today the parent must be embedded).
 - Signing: auto-generated thumbnails (would need image decode/resize),
-  ingredients (re-signing an already signed file as an edit of its parent),
-  c2pa.opened / placed / removed actions, CreativeWork and other assertions,
+  component ingredients (`componentOf`, c2pa.placed / removed actions) and
+  ingredient thumbnails; the parent ingredient and c2pa.opened were added
+  in Phase 18, CreativeWork and other assertions,
   signature algorithms other than ES256, keys in HSMs beyond crypto.Signer.
 
 ## Log
@@ -828,3 +832,123 @@ SHA256SUMS. Phase 16's "Done when" checks now pass.
   attribution or co-author lines. The user reviews and pushes.
 - Phase 28 (PDF) moved to "Later". v0.5 is WebP plus HEIC/AVIF, with
   Gate G now after Phase 27.
+
+### Phase 18 — Ingredients and remote manifests (2026-11-12)
+
+**Built**
+- Re-signing keeps the history (`sign/ingredient.go`):
+  - When the input already has a manifest store, every manifest in it is
+    copied into the new store unchanged. A production check confirms that
+    each re-encodes to exactly its original bytes.
+  - The new manifest adds a `c2pa.ingredient.v3` assertion with
+    `relationship: parentOf`, `dc:format` and `instanceID`.
+  - That assertion holds hashed URIs `activeManifest` (the parent manifest
+    box) and `claimSignature` (its signature box), using the same hashing
+    convention as c2pa-rs, which `TestClaimSignatureHashConvention` checks
+    against c2patool's `edited.jpg`.
+  - It also holds `validationResults`: the parent as our verifier saw it,
+    with `ParentVerify` options (default: no anchors, as c2patool).
+  - A leading `c2pa.opened` action carries `parameters.ingredients`. It is
+    added in front of the caller's actions; an explicit `c2pa.opened`
+    keeps its own parameters.
+  - With a parent, `c2pa.created` and `DigitalSourceType` are rejected.
+    `Options.NoHistory` (CLI `--no-history`) restores the old behaviour of
+    replacing the existing store.
+  - An unreadable existing store gives `ErrParent`, unless `NoHistory` is
+    set.
+  - The reserve-and-backfill size check is unchanged and still runs.
+- Remote and sidecar manifests:
+  - `container/xmp` reads and writes `dcterms:provenance` with
+    `encoding/xml` and in-place text edits, so other XMP properties are
+    kept byte for byte.
+  - `container/jpeg` handles XMP in APP1 (`XMP`, `SetXMP`), and
+    `container/png` handles it in `iTXt`, including compressed packets on
+    read.
+  - `internal/asset` gained `RemoteURL` and `SetRemoteURL`.
+- Signing options:
+  - `Options.RemoteURL` (CLI `--remote`) writes the URL into the XMP
+    before hashing, so the reference is covered by the hard binding.
+  - `Options.Sidecar` (CLI `--sidecar`) does not embed the store. Its
+    `c2pa.hash.data` has no exclusions and covers the whole file.
+  - The new `sign.Asset` and `c2paseal.SignAsset` return both the file
+    and the store. `c2paseal.Sign` writes `SidecarPath(out)`
+    (`<name>.c2pa`).
+  - `sign.JPEG`, `sign.PNG` and `SignBytes` reject `Sidecar` with
+    `ErrSidecar`, because they would lose the store.
+- Verifying external stores:
+  - `VerifyOptions.ManifestStore` takes an external store.
+  - `FetchRemote` and `HTTPClient` are opt-in: by default verifying stays
+    offline. Fetches have a 30 s timeout and a 64 MiB cap, and send
+    `Accept: application/c2pa`.
+  - Order of lookup: embedded store, then sidecar, then XMP URL
+    (C2PA 2.4 §15.5.3).
+  - A remote store that is not fetched or not reachable gives
+    `manifest.inaccessible` (a C2PA 2.4 failure code).
+  - `VerifyFile` and `Read` find sidecars by themselves. New
+    `ReadStore` decodes a store on its own.
+- CLI:
+  - `sign` gained `--no-history`, `--remote` and `--sidecar`, and its JSON
+    output now reports `manifests`, `sidecar` and `remote_url`.
+  - `verify` gained `--manifest` and `--fetch-remote`.
+- Fixtures:
+  - `scripts/make-remote-fixtures.sh` makes `testdata/remote/` with
+    c2patool: embedded plus remote, sidecar-only and remote-only, in JPEG
+    and PNG.
+  - The oracle runs with the stores served by `scripts/servedir`, a
+    standard-library file server with a lifetime, because Windows cannot
+    always kill it. `scripts/oracle` can regenerate only named
+    subdirectories, so the rest of the corpus was not touched.
+  - `fixtures.Remote`, `External`, `ExternalStore` and `RemoteClient`
+    (which serves `served/` without opening a port) let the corpus tests
+    run on these files.
+- Interop:
+  - The harness serves remote stores on 127.0.0.1:8765.
+  - C2paSeal runs with `FetchRemote` there.
+  - Three new signed groups: `c2paseal+parent`, `c2paseal+sidecar` and
+    `c2paseal+remote`.
+  - Each row's container facts now include the XMP reference and the
+    sidecar.
+  - One new explained cause: c2pa-mcp has no sidecar or remote support
+    and reports `claim.missing`.
+- Docs: SPEC.md lists ingredients and manifest location as in scope.
+  README (scope table and limits), doc.go and testdata/README.md updated.
+
+**Results**
+- c2patool 0.27.21 accepts our chains of 2 and 3 manifests on all four
+  unsigned fixtures, with failures only `signingCredential.untrusted` (none
+  with the test root trusted), and sees every manifest
+  (`TestC2patoolIngredientChain`).
+- c2patool also accepts our re-signed c2patool files (`edited.jpg`,
+  `ts.png`, `titled-ts.jpg`).
+- c2patool reads our sidecar next to the file, fetches our remote-only
+  store from a local server, and uses the embedded store when both exist:
+  Valid, and Trusted with the test root (`TestC2patoolRemote`).
+- Our ingredient deltas match c2patool's on its own chain: only
+  `ingredient.manifest.validated`.
+- TestCorpus matches c2patool on all 6 new fixtures in both modes,
+  including the remote-only ones fetched through `RemoteClient`.
+- INTEROP.md (regenerated with `-require c2patool,c2pa-mcp -strict`):
+  51 files × 2 modes. C2paSeal agrees with c2patool on every file where
+  c2patool reports statuses. 54 disagreements, all explained, 0
+  unexplained.
+- gofmt, build, vet, staticcheck and the full suite are clean. Coverage:
+  xmp 94.0%, jpeg 94.8%, png 92.3%, sign 86.9%, verify 92.6%.
+- Fuzzing, 2 minutes each with no crashers:
+  - New targets: `FuzzProvenance` (848k execs), jpeg `FuzzXMP` (419k),
+    png `FuzzXMP` (689k).
+  - Changed targets: `FuzzSign`, which now also signs with a sidecar and
+    a remote URL, and whose signed seeds go through the parent path
+    (29k execs); `FuzzFile`, which reaches the XMP and external-store path
+    (4.3k execs, slow while the test suite ran alongside).
+
+**Found along the way**
+- The interop harness first gave `small.jpg` and `small.png` the same
+  sidecar path, so one store overwrote the other and both tools reported
+  `assertion.dataHash.mismatch`. The harness now puts the format in the
+  name. The same hazard applies to users with `--sidecar`, since the spec
+  names sidecars `<stem>.c2pa`; this is noted in the README.
+
+**Open issues**
+- Re-signing a file whose only store is a sidecar or remote one does not
+  record it as the parent, because the parent must be embedded. Added to
+  Future work.

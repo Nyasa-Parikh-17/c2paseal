@@ -108,7 +108,8 @@ func TestSignFixtures(t *testing.T) {
 	}
 }
 
-// TestResign replaces a c2patool manifest with ours.
+// TestResign replaces a c2patool manifest with ours (NoHistory; the
+// default, which keeps it as the parent, is in ingredient_test.go).
 func TestResign(t *testing.T) {
 	chain, key := testPKI(t)
 	dir, _ := fixtures.Dir()
@@ -116,7 +117,7 @@ func TestResign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := JPEG(in, &Options{Chain: chain, Signer: key})
+	out, err := JPEG(in, &Options{Chain: chain, Signer: key, NoHistory: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +194,7 @@ func TestMisSizedPlaceholder(t *testing.T) {
 	for _, n := range []int{63, 65, 0} {
 		out, err := embed(in, &Options{Chain: chain, Signer: key}, buildConfig{sigLen: n}, &jpegContainer{})
 		if !errors.Is(err, ErrSizeMismatch) || out != nil {
-			t.Errorf("signature placeholder of %d bytes: err %v, output %d bytes; want ErrSizeMismatch, none", n, err, len(out))
+			t.Errorf("signature placeholder of %d bytes: err %v, output %v; want ErrSizeMismatch, none", n, err, out != nil)
 		}
 	}
 	// Step 7's final check on its own.

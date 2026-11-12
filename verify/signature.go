@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"math/big"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -24,6 +25,21 @@ type Options struct {
 
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
+
+	// ManifestStore is a manifest store kept outside the file (a sidecar
+	// .c2pa file, or a store fetched by the caller). It is used only when
+	// the file has no embedded store.
+	ManifestStore []byte
+
+	// FetchRemote lets File download the manifest store a file references
+	// in its XMP (dcterms:provenance) when it has neither an embedded store
+	// nor ManifestStore. Off by default, so verifying never touches the
+	// network unless asked to; a remote store that is not fetched gives
+	// manifest.inaccessible.
+	FetchRemote bool
+	// HTTPClient fetches remote stores; nil means a client with a 30-second
+	// timeout.
+	HTTPClient *http.Client
 }
 
 func (o *Options) now() time.Time {

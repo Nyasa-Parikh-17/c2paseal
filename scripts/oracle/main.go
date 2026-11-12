@@ -8,7 +8,11 @@
 // {"c2patool_error": "<stderr>", "exit_code": N} instead. Output is never
 // edited afterwards.
 //
-// Usage: go run ./scripts/oracle <testdata-dir>
+// Usage: go run ./scripts/oracle <testdata-dir> [subdir...]
+//
+// With subdirectories named, only those are regenerated (for example
+// "remote", whose remote-only files need scripts/make-remote-fixtures.sh's
+// local server running).
 package main
 
 import (
@@ -22,12 +26,15 @@ import (
 	"strings"
 )
 
-var dirs = []string{"unsigned", "signed", "broken", "samples"}
+var dirs = []string{"unsigned", "signed", "broken", "samples", "remote"}
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: oracle <testdata-dir>")
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: oracle <testdata-dir> [subdir...]")
 		os.Exit(2)
+	}
+	if len(os.Args) > 2 {
+		dirs = os.Args[2:]
 	}
 	if err := run(os.Args[1]); err != nil {
 		fmt.Fprintln(os.Stderr, "oracle:", err)

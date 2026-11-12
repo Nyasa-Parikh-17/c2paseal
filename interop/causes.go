@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"slices"
 	"strings"
 
@@ -97,6 +98,23 @@ var causes = []struct {
 			"c2patool and C2paSeal check expiry and trust separately and, without anchors, also report `signingCredential.untrusted`; " +
 			"c2pa-mcp's chain check stops at the expiry error (`x509: certificate has expired or is not yet valid`), so it never reports trust. " +
 			"With the test root trusted, all three agree."},
+	},
+	{
+		// Sidecar and remote-only manifest stores.
+		match: func(r *row, m mode) bool {
+			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
+			b, err := os.ReadFile(r.Item.Path)
+			if err != nil || mcp.Skipped || tool.Skipped || key(seal) != key(tool) {
+				return false
+			}
+			where, _ := externalLocation(r.Item.Path, b)
+			return where != "" && failSet(mcp, verify.ClaimMissing)
+		},
+		cause: cause{"c2pa-mcp: does not look for manifest stores outside the file", "The file has no embedded store (no APP11 C2PA segment / no `caBX` chunk); " +
+			"its store is in a `.c2pa` sidecar next to it, or only at the URL in its XMP `dcterms:provenance` (container facts say which). " +
+			"C2PA 2.4 §15.5.3 tells validators to look for both. c2patool reads the sidecar, or fetches the URL (served by the harness on " + remoteAddr + "), " +
+			"and C2paSeal does the same (`VerifyFile` finds the sidecar; the harness turns on `FetchRemote`); the two agree. " +
+			"c2pa-mcp `verify` has no sidecar or remote option and reports `claim.missing` (`no C2PA manifest found`)."},
 	},
 }
 

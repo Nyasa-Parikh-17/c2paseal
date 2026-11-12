@@ -49,12 +49,16 @@ const usageText = `c2paseal reads, verifies and signs C2PA Content Credentials i
 
 usage:
   c2paseal inspect [--json] <file>
-        print the manifest store as JSON (as c2patool --detailed does)
-  c2paseal verify [--json] [--trust anchors.pem] <file>
+        print the manifest store as JSON (as c2patool --detailed does);
+        a file without an embedded store is read from its .c2pa sidecar
+  c2paseal verify [--json] [--trust anchors.pem] [--manifest store.c2pa]
+                  [--fetch-remote] <file>
         validate the manifest store and print the C2PA status codes
   c2paseal sign [--json] --cert chain.pem --key key.pem --in in --out out
                 [--title t] [--source-type uri] [--tsa url]
-        sign a JPEG or PNG (replaces any existing manifest store)
+                [--no-history] [--remote url] [--sidecar]
+        sign a JPEG or PNG; an existing manifest store is kept as the
+        parent ingredient unless --no-history is given
   c2paseal serve [--addr 127.0.0.1:8080] [--pki testdata/pki]
         run the demo UI in a browser (signs with the TEST ONLY PKI)
   c2paseal version [--json]
@@ -173,14 +177,23 @@ func inspect(args []string, stdout, stderr io.Writer) int {
 }
 
 func verifyCmd(args []string, stdout, stderr io.Writer) int {
-	c := newCommand("verify", "[--json] [--trust anchors.pem] <file>", stdout, stderr).
+	c := newCommand("verify", "[--json] [--trust anchors.pem] [--manifest store.c2pa] [--fetch-remote] <file>", stdout, stderr).
 		withJSON("print validation results as JSON")
 	trust := c.fs.String("trust", "", "PEM file of trust anchor certificates (default: none, so every signer is untrusted)")
+	store := c.fs.String("manifest", "", "manifest store kept outside the file (default: the embedded store, else <file>.c2pa next to it)")
+	fetch := c.fs.Bool("fetch-remote", false, "download the manifest store the file's XMP references if it has no embedded or sidecar store (needs network)")
 	file, code := c.parseFile(args)
 	if code >= 0 {
 		return code
 	}
-	opts := &c2paseal.VerifyOptions{}
+	opts := &c2paseal.VerifyOptions{FetchRemote: *fetch}
+	if *store != "" {
+		b, err := os.ReadFile(*store)
+		if err != nil {
+			return c.fail(exitUsage, err)
+		}
+		opts.ManifestStore = b
+	}
 	if *trust != "" {
 		anchors, err := c2paseal.LoadTrustAnchors(*trust)
 		if err != nil {
@@ -216,7 +229,10 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	out := c.fs.String("out", "", "where to write the signed file (required)")
 	title := c.fs.String("title", "", "optional dc:title for the claim")
 	tsa := c.fs.String("tsa", "", "RFC 3161 time-stamp authority URL; time-stamps the signature (needs network)")
-	source := c.fs.String("source-type", "", "IPTC digital source type for the c2pa.created action (default "+sign.DefaultDigitalSourceType+")")
+	source := c.fs.String("source-type", "", "IPTC digital source type for the c2pa.created action (default "+sign.DefaultDigitalSourceType+"); not allowed when the input is already signed, unless --no-history")
+	noHistory := c.fs.Bool("no-history", false, "replace an existing manifest store instead of recording it as the parent ingredient")
+	remote := c.fs.String("remote", "", "URL where the manifest store will be served, written into the file's XMP (dcterms:provenance)")
+	sidecar := c.fs.Bool("sidecar", false, "do not embed the manifest store; write it next to --out as a .c2pa file")
 	if err := c.fs.Parse(args); err != nil {
 		return c.parseErr(err)
 	}
@@ -229,22 +245,40 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return c.fail(exitUsage, err)
 	}
-	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source, TSAURL: *tsa}
+	opts := &c2paseal.SignOptions{Chain: chain, Signer: signer, Title: *title, DigitalSourceType: *source, TSAURL: *tsa,
+		NoHistory: *noHistory, RemoteURL: *remote, Sidecar: *sidecar}
 	if err := c2paseal.Sign(*in, *out, opts); err != nil {
 		return c.fail(exitInvalid, err)
-	}
-	if !*c.asJSON {
-		fmt.Fprintf(stdout, "signed %s -> %s\n", *in, *out)
-		return exitValid
 	}
 	s, err := c2paseal.Read(*out)
 	if err != nil {
 		return c.fail(exitInvalid, err)
 	}
-	return writeJSON(stdout, stderr, map[string]any{
+	if !*c.asJSON {
+		fmt.Fprintf(stdout, "signed %s -> %s\n", *in, *out)
+		if len(s.Manifests) > 1 {
+			fmt.Fprintf(stdout, "kept the existing manifest store as the parent ingredient (%d manifests)\n", len(s.Manifests))
+		}
+		if s.Sidecar != "" {
+			fmt.Fprintf(stdout, "manifest store written to %s\n", s.Sidecar)
+		}
+		if *remote != "" {
+			fmt.Fprintf(stdout, "the file's XMP references %s: serve the manifest store there\n", *remote)
+		}
+		return exitValid
+	}
+	res := map[string]any{
 		"input": *in, "output": *out, "format": s.Format,
 		"active_manifest": s.Active.Label, "time_stamped": *tsa != "",
-	})
+		"manifests": len(s.Manifests),
+	}
+	if s.Sidecar != "" {
+		res["sidecar"] = s.Sidecar
+	}
+	if *remote != "" {
+		res["remote_url"] = *remote
+	}
+	return writeJSON(stdout, stderr, res)
 }
 
 // serveCmd runs the demo UI until ctx is done or the process is interrupted.

@@ -1,10 +1,14 @@
 package fixtures
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,10 +22,14 @@ const (
 	Signed   Kind = "signed"
 	Broken   Kind = "broken"
 	Sample   Kind = "samples"
+	// Remote holds files whose manifest store is outside the file: a
+	// <name>.c2pa sidecar next to it, or a store in remote/served/ that
+	// the file's XMP references (see RemoteClient).
+	Remote Kind = "remote"
 )
 
 // Kinds lists every corpus directory, in a stable order.
-var Kinds = []Kind{Unsigned, Signed, Broken, Sample}
+var Kinds = []Kind{Unsigned, Signed, Broken, Sample, Remote}
 
 // Fixture is one test image and the paths of its oracle output.
 type Fixture struct {
@@ -35,7 +43,53 @@ type Fixture struct {
 	// testdata/pki/trust-anchors.pem trusted. Either may not exist.
 	ExpectedPath string
 	TrustedPath  string
+
+	// SidecarPath is the fixture's <name>.c2pa manifest store, or "" if
+	// there is none. ServedPath is the store in remote/served/ that a
+	// remote-only fixture's XMP references, or "".
+	SidecarPath string
+	ServedPath  string
 }
+
+// External reports whether the fixture's manifest store is outside the
+// file (a sidecar or a remote store) rather than embedded.
+func (f Fixture) External() bool { return f.SidecarPath != "" || f.ServedPath != "" }
+
+// ExternalStore returns the bytes of the fixture's sidecar or remote store,
+// or nil if it is not External.
+func (f Fixture) ExternalStore() ([]byte, error) {
+	switch {
+	case f.SidecarPath != "":
+		return os.ReadFile(f.SidecarPath)
+	case f.ServedPath != "":
+		return os.ReadFile(f.ServedPath)
+	}
+	return nil, nil
+}
+
+// RemoteClient returns an HTTP client that answers every request with the
+// file of the same base name in testdata/remote/served, as the server in
+// scripts/make-remote-fixtures.sh did, without opening a network port.
+func RemoteClient() (*http.Client, error) {
+	root, err := Dir()
+	if err != nil {
+		return nil, err
+	}
+	served := filepath.Join(root, string(Remote), "served")
+	return &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+		b, err := os.ReadFile(filepath.Join(served, path.Base(r.URL.Path)))
+		status := http.StatusOK
+		if err != nil {
+			b, status = nil, http.StatusNotFound
+		}
+		return &http.Response{StatusCode: status, Status: http.StatusText(status), Body: io.NopCloser(bytes.NewReader(b)),
+			Header: http.Header{}, Request: r, ContentLength: int64(len(b))}, nil
+	})}, nil
+}
+
+type roundTripper func(*http.Request) (*http.Response, error)
+
+func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 // String returns "kind/name", for subtest names.
 func (f Fixture) String() string { return string(f.Kind) + "/" + f.Name }
@@ -165,14 +219,21 @@ func List() ([]Fixture, error) {
 				continue
 			}
 			p := filepath.Join(root, string(k), e.Name())
-			out = append(out, Fixture{
+			f := Fixture{
 				Name:         e.Name(),
 				Kind:         k,
 				Format:       format,
 				Path:         p,
 				ExpectedPath: p + ".expected.json",
 				TrustedPath:  p + ".trusted.expected.json",
-			})
+			}
+			stem := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+			if sc := filepath.Join(root, string(k), stem+".c2pa"); fileExists(sc) {
+				f.SidecarPath = sc
+			} else if sv := filepath.Join(root, string(k), "served", stem+".c2pa"); k == Remote && fileExists(sv) {
+				f.ServedPath = sv
+			}
+			out = append(out, f)
 		}
 	}
 	return out, nil
@@ -185,6 +246,11 @@ func ListKind(k Kind) ([]Fixture, error) {
 		return nil, err
 	}
 	return slices.DeleteFunc(all, func(f Fixture) bool { return f.Kind != k }), nil
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.Mode().IsRegular()
 }
 
 func formatOf(name string) string {

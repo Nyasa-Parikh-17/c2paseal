@@ -26,15 +26,39 @@ type ManifestStore struct {
 	Root      *jumbf.Box
 	Manifests []*manifest.Manifest // in store order
 	Active    *manifest.Manifest   // the last manifest
+	Sidecar   string               // the sidecar file the store came from; empty if embedded
 }
 
-// Read reads and decodes the manifest store embedded in a JPEG or PNG file.
+// Read reads and decodes the manifest store of a JPEG or PNG file: the
+// embedded one, or, if there is none, its sidecar (SidecarPath(path)).
 func Read(path string) (*ManifestStore, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: %w", err)
 	}
+	if sidecar, ok := findSidecar(path, b, nil); ok {
+		st, err := ReadStore(sidecar)
+		if err != nil {
+			return nil, err
+		}
+		st.Format, st.Sidecar = asset.Detect(b), SidecarPath(path)
+		return st, nil
+	}
 	return ReadBytes(b)
+}
+
+// ReadStore decodes a manifest store on its own: a .c2pa sidecar or a
+// fetched remote store. Format is left empty.
+func ReadStore(store []byte) (*ManifestStore, error) {
+	root, err := jumbf.Parse(store)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: %w", err)
+	}
+	ms, err := manifest.DecodeStore(root)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: %w", err)
+	}
+	return &ManifestStore{Root: root, Manifests: ms, Active: ms[len(ms)-1]}, nil
 }
 
 // ReadBytes is Read for a file already in memory. The store shares memory

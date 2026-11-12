@@ -13,7 +13,10 @@
 //     (claimSignature.validated, assertion.dataHash.mismatch, ...) and a
 //     state: Invalid, Valid or Trusted. Malformed input never makes them
 //     fail; it becomes a failure status.
-//   - [Sign] embeds a newly signed manifest, replacing any existing one.
+//   - [Sign] signs a file. An existing manifest store is kept and its
+//     active manifest recorded as the parent ingredient, so the history
+//     survives re-signing; the store can also go in a .c2pa sidecar, with
+//     an optional remote URL in the file's XMP.
 //
 // Signing uses reserve-and-backfill: a placeholder manifest of the final
 // size is inserted first, then the hard-binding hash and the signature are
@@ -21,9 +24,8 @@
 // length, which is checked before anything is returned.
 //
 // Scope: JPEG and PNG, ES256, c2pa.hash.data. No video or BMFF, no soft
-// bindings, no remote manifests. The target C2PA specification revision is
-// pinned in SPEC.md, and INTEROP.md compares the results with c2patool and
-// other validators.
+// bindings. The target C2PA specification revision is pinned in SPEC.md,
+// and INTEROP.md compares the results with c2patool and other validators.
 //
 // The certificates in testdata/pki are TEST ONLY: their private keys are
 // public, so files signed with them prove nothing and validators report

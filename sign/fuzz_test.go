@@ -9,9 +9,11 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
-// FuzzSign signs arbitrary input as JPEG and as PNG. Signing must never
-// panic, and anything it does sign must verify with no failure other than
-// the untrusted test signer.
+// FuzzSign signs arbitrary input as JPEG and as PNG, and once more with
+// the store in a sidecar and a remote reference in the XMP. Signing must
+// never panic, and anything it does sign must verify with no failure other
+// than the untrusted test signer. Signed seeds exercise the parent
+// ingredient path.
 func FuzzSign(f *testing.F) {
 	for _, k := range []fixtures.Kind{fixtures.Unsigned, fixtures.Signed} {
 		fs, _ := fixtures.ListKind(k)
@@ -34,6 +36,13 @@ func FuzzSign(f *testing.F) {
 			r := verify.File(out, nil)
 			if got := failures(r); !slices.Equal(got, []string{verify.SigningCredentialUntrusted}) {
 				t.Fatalf("%s: signed file has failures %q", name, got)
+			}
+		}
+		ext := &Options{Chain: chain, Signer: key, Sidecar: true, RemoteURL: "https://example.com/m.c2pa"}
+		if s, err := Asset(b, ext); err == nil {
+			r := verify.File(s.File, &verify.Options{ManifestStore: s.Store})
+			if got := failures(r); !slices.Equal(got, []string{verify.SigningCredentialUntrusted}) {
+				t.Fatalf("sidecar: signed file has failures %q", got)
 			}
 		}
 	})

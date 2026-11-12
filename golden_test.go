@@ -120,7 +120,14 @@ func TestGolden(t *testing.T) {
 		}
 		n++
 		t.Run(f.String(), func(t *testing.T) {
-			s, err := Read(f.Path)
+			s, err := Read(f.Path) // finds a sidecar by itself
+			if f.ServedPath != "" {
+				store, rerr := f.ExternalStore()
+				if rerr != nil {
+					t.Fatal(rerr)
+				}
+				s, err = ReadStore(store)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

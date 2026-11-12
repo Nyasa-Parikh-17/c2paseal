@@ -75,7 +75,7 @@ func TestSignPNGFixtures(t *testing.T) {
 }
 
 // TestResignPNG replaces a c2patool manifest (with a time-stamp and a
-// thumbnail) with ours.
+// thumbnail) with ours (NoHistory).
 func TestResignPNG(t *testing.T) {
 	chain, key := testPKI(t)
 	dir, _ := fixtures.Dir()
@@ -83,7 +83,7 @@ func TestResignPNG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := PNG(in, &Options{Chain: chain, Signer: key})
+	out, err := PNG(in, &Options{Chain: chain, Signer: key, NoHistory: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestMisSizedPlaceholderPNG(t *testing.T) {
 	for _, n := range []int{63, 65, 0} {
 		out, err := embed(in, &Options{Chain: chain, Signer: key}, buildConfig{sigLen: n}, &pngContainer{})
 		if !errors.Is(err, ErrSizeMismatch) || out != nil {
-			t.Errorf("signature placeholder of %d bytes: err %v, output %d bytes; want ErrSizeMismatch, none", n, err, len(out))
+			t.Errorf("signature placeholder of %d bytes: err %v, output %v; want ErrSizeMismatch, none", n, err, out != nil)
 		}
 	}
 }

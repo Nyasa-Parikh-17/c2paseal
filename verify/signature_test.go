@@ -24,7 +24,15 @@ func activeManifest(t *testing.T, f fixtures.Fixture) *manifest.Manifest {
 		t.Fatal(err)
 	}
 	var root *jumbf.Box
-	if f.Format == "png" {
+	if f.External() {
+		store, err := f.ExternalStore()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if root, err = jumbf.Parse(store); err != nil {
+			t.Fatal(err)
+		}
+	} else if f.Format == "png" {
 		st, err := png.Extract(b)
 		if err != nil {
 			t.Fatal(err)

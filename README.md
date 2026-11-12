@@ -92,7 +92,9 @@ Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
 | Operations | Read, verify, sign |
 | Signature | ES256 (ECDSA P-256, SHA-256) |
 | Hard binding | `c2pa.hash.data` |
-| Assertions written | `c2pa.actions.v2` (`c2pa.created` plus later actions), `c2pa.hash.data`, optional `c2pa.thumbnail.claim` |
+| Assertions written | `c2pa.actions.v2` (`c2pa.created`, or `c2pa.opened` when re-signing, plus later actions), `c2pa.hash.data`, `c2pa.ingredient.v3` for the parent when re-signing, optional `c2pa.thumbnail.claim` |
+| Edit history | Re-signing keeps the earlier manifests byte for byte and records the previous one as the parent ingredient |
+| Manifest location | Embedded, in a `.c2pa` sidecar (`--sidecar`), or at a remote URL referenced from XMP (`--remote`); `verify` finds sidecars itself and fetches remote stores only with `--fetch-remote` |
 | Time-stamps | RFC 3161 `sigTst2`, verified when present, optional when signing |
 | Specification | C2PA 2.4, pinned in [SPEC.md](SPEC.md) |
 
@@ -105,10 +107,15 @@ Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
 - **JPEG and PNG only.** No video, BMFF or other formats.
 - **ES256 only**, for signing and for verifying claim signatures.
 - **One hard binding:** `c2pa.hash.data`. No soft bindings or watermarks,
-  no remote manifests, no OCSP/CRL revocation checks, no C2PA 1.x (claim v1)
+  no OCSP/CRL revocation checks, no C2PA 1.x (claim v1)
   manifests.
-- A new signature replaces any existing manifest; it does not record the
-  previous one as an ingredient. No auto-generated thumbnails.
+- Re-signing keeps the existing manifests and records the previous one as
+  the parent ingredient (`--no-history` replaces them instead). Only the
+  parent relationship is written; no component ingredients, no ingredient
+  thumbnails, no auto-generated thumbnails.
+- A sidecar is `<name>.c2pa` next to the file, as the spec says, so
+  `photo.jpg` and `photo.png` in one folder would share one sidecar path;
+  give them different names.
 - A time-stamped file reserves about 10 KiB for the token, whatever its real
   size. Without a time-stamp, validators check the certificate against the
   current time.

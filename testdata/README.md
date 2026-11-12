@@ -59,3 +59,19 @@ One defect each, made from `signed/small.*` by `scripts/mkbroken` (except `expir
 
 Put public C2PA sample files here (`.jpg`/`.png`) and rerun
 `go run ./scripts/oracle testdata` to add their oracle output.
+
+## remote/
+
+Manifest stores kept outside the file. Generated separately by
+`scripts/make-remote-fixtures.sh` (c2patool 0.27.21), which regenerates only
+this directory; the oracle runs with `remote/served/` served on
+`http://127.0.0.1:8765/`. Expected state: `Valid` / `Trusted`.
+
+| File | Store | c2patool flags |
+|---|---|---|
+| `embedded-remote.jpg`, `embedded-remote.png` | embedded, and also referenced from XMP `dcterms:provenance` | `-r <url>` |
+| `sidecar.jpg`, `sidecar-png.png` | only in `sidecar.c2pa` / `sidecar-png.c2pa` next to the file | `-s` |
+| `remote.jpg`, `remote-png.png` | only at the XMP URL; the store is in `served/` | `-s -r <url>` |
+
+Tests serve `served/` without a network port (`fixtures.RemoteClient`);
+`go run ./interop` serves it on 127.0.0.1:8765.

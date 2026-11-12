@@ -71,11 +71,17 @@ func File(b []byte, opts *Options) *Result {
 		return &Result{ActiveManifest: []Status{{Code: code, Explanation: why}}}
 	}
 	_, root, err := asset.Extract(b)
+	if errors.Is(err, asset.ErrNoManifest) {
+		var st *Status
+		root, st = external(b, opts)
+		if st != nil {
+			return &Result{ActiveManifest: []Status{*st}}
+		}
+		err = nil
+	}
 	switch {
 	case errors.Is(err, asset.ErrUnsupportedFormat):
 		return fail(GeneralError, "unsupported file format")
-	case errors.Is(err, asset.ErrNoManifest):
-		return fail(ClaimMissing, "could not find active manifest")
 	case errors.Is(err, asset.ErrMultipleStores):
 		return fail(ClaimMultiple, "more than one manifest store")
 	case isJUMBFError(err):

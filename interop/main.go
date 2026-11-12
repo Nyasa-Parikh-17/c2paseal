@@ -63,11 +63,19 @@ func run(out, work, require string, strict bool) error {
 		defer os.RemoveAll(work)
 	}
 
+	// Remote manifest stores: the c2patool fixtures' (testdata/remote/served)
+	// and C2paSeal's own, on the address their files' XMP references.
+	remote, err := startRemote(filepath.Join(td, "remote", "served"))
+	if err != nil {
+		return err
+	}
+	defer remote.Close()
+
 	corpus, err := fixtureCorpus()
 	if err != nil {
 		return err
 	}
-	signed, err := signCorpus(td, work, corpus)
+	signed, err := signCorpus(td, work, corpus, remote)
 	if err != nil {
 		return err
 	}
@@ -100,7 +108,7 @@ func run(out, work, require string, strict bool) error {
 		if err != nil {
 			return err
 		}
-		row := row{Item: it, Facts: containerFacts(b)}
+		row := row{Item: it, Facts: append(containerFacts(b), externalFacts(it.Path, b)...)}
 		for _, mode := range modes {
 			for _, t := range tools {
 				row.Results = append(row.Results, result{Tool: t.info().Name, Mode: mode, Outcome: t.run(it.Path, mode)})
@@ -136,9 +144,49 @@ func fixtureCorpus() ([]item, error) {
 	return out, nil
 }
 
-// signCorpus signs every unsigned fixture with the TEST ONLY PKI, once
-// without and once with a time-stamp from a local test TSA.
-func signCorpus(td, work string, corpus []item) ([]item, error) {
+// remoteAddr is where remote manifest stores are served while the harness
+// runs. It is fixed: the c2patool fixtures in testdata/remote reference it.
+const remoteAddr = "127.0.0.1:8765"
+
+// remoteServer serves the fixture stores from disk and C2paSeal's remote
+// stores from memory, under /c2paseal/.
+type remoteServer struct {
+	srv    *http.Server
+	stores map[string][]byte
+}
+
+func startRemote(served string) (*remoteServer, error) {
+	ln, err := net.Listen("tcp", remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("remote manifest server: %w (is something else using %s?)", err, remoteAddr)
+	}
+	r := &remoteServer{stores: map[string][]byte{}}
+	files := http.FileServer(http.Dir(served))
+	r.srv = &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if b, ok := r.stores[req.URL.Path]; ok {
+			w.Header().Set("Content-Type", "application/c2pa")
+			w.Write(b)
+			return
+		}
+		files.ServeHTTP(w, req)
+	})}
+	go r.srv.Serve(ln)
+	return r, nil
+}
+
+// put registers a store (before any request for it) and returns its URL.
+func (r *remoteServer) url(name string) string    { return "http://" + remoteAddr + "/c2paseal/" + name }
+func (r *remoteServer) put(name string, b []byte) { r.stores["/c2paseal/"+name] = b }
+func (r *remoteServer) Close() error              { return r.srv.Close() }
+
+// signCorpus signs every unsigned fixture with the TEST ONLY PKI:
+//
+//   - c2paseal: plain; c2paseal+tsa: with a time-stamp from a local test TSA;
+//   - c2paseal+parent: the c2paseal file signed again, so its manifest is
+//     recorded as the parent ingredient (a chain of two manifests);
+//   - c2paseal+sidecar: the store in <name>.c2pa next to the file;
+//   - c2paseal+remote: the store only at the URL in the file's XMP.
+func signCorpus(td, work string, corpus []item, remote *remoteServer) ([]item, error) {
 	chain, key, err := c2paseal.LoadSigner(filepath.Join(td, "pki", "leaf-chain.pem"), filepath.Join(td, "pki", "leaf.key"))
 	if err != nil {
 		return nil, err
@@ -165,18 +213,45 @@ func signCorpus(td, work string, corpus []item) ([]item, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, v := range []struct{ group, tsa string }{{"c2paseal", ""}, {"c2paseal+tsa", tsaURL}} {
-			b, err := c2paseal.SignBytes(in, &sign.Options{Chain: chain, Signer: key, TSAURL: v.tsa})
-			if err != nil {
-				return nil, fmt.Errorf("sign %s: %w", it.Name, err)
+		base := filepath.Base(it.Path)
+		ext := filepath.Ext(base)
+		var plain []byte
+		for _, v := range []string{"c2paseal", "c2paseal+tsa", "c2paseal+parent", "c2paseal+sidecar", "c2paseal+remote"} {
+			// The format is part of the name: small.jpg and small.png would
+			// otherwise share one sidecar path (<stem>.c2pa).
+			name := strings.TrimSuffix(base, ext) + "-" + strings.TrimPrefix(ext, ".") + "." + strings.ReplaceAll(v, "+", "-")
+			opts := &sign.Options{Chain: chain, Signer: key}
+			src := in
+			switch v {
+			case "c2paseal+tsa":
+				opts.TSAURL = tsaURL
+			case "c2paseal+parent":
+				src = plain
+			case "c2paseal+sidecar":
+				opts.Sidecar = true
+			case "c2paseal+remote":
+				opts.Sidecar, opts.RemoteURL = true, remote.url(name+".c2pa")
 			}
-			base := filepath.Base(it.Path)
-			name := strings.TrimSuffix(base, filepath.Ext(base)) + "." + strings.ReplaceAll(v.group, "+", "-") + filepath.Ext(base)
-			path := filepath.Join(work, name)
-			if err := os.WriteFile(path, b, 0o644); err != nil {
+			s, err := c2paseal.SignAsset(src, opts)
+			if err != nil {
+				return nil, fmt.Errorf("sign %s (%s): %w", it.Name, v, err)
+			}
+			if v == "c2paseal" {
+				plain = s.File
+			}
+			path := filepath.Join(work, name+ext)
+			if err := os.WriteFile(path, s.File, 0o644); err != nil {
 				return nil, err
 			}
-			out = append(out, item{Name: v.group + "/" + base, Path: path, Group: v.group, Format: asset.Detect(b)})
+			switch v {
+			case "c2paseal+sidecar":
+				if err := os.WriteFile(c2paseal.SidecarPath(path), s.Store, 0o644); err != nil {
+					return nil, err
+				}
+			case "c2paseal+remote":
+				remote.put(name+".c2pa", s.Store)
+			}
+			out = append(out, item{Name: v + "/" + base, Path: path, Group: v, Format: asset.Detect(s.File)})
 		}
 	}
 	return out, nil

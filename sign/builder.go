@@ -59,6 +59,7 @@ type Manifest struct {
 	sig      *jumbf.Box // cbor content box of the signature
 	layout   hashDataLayout
 
+	external  bool   // store kept outside the file: hash.data has no exclusion
 	protected []byte // serialised COSE protected header
 	sigLen    int    // placeholder signature length (esSignatureLen)
 	tstSize   int    // reserved unprotected header size; 0 = no time-stamp
@@ -75,11 +76,17 @@ type buildConfig struct {
 // thumbnail, hard binding), claim and COSE signature, with zeroed binding
 // values and a zeroed signature at their final sizes.
 func Build(opts *Options) (*Manifest, error) {
-	return build(opts, buildConfig{sigLen: esSignatureLen})
+	return build(opts, buildConfig{sigLen: esSignatureLen}, nil)
 }
 
-func build(opts *Options, cfg buildConfig) (*Manifest, error) {
-	if err := opts.validate(); err != nil {
+// build builds the placeholder manifest. With a parent, the new store holds
+// the parent's manifests unchanged, then the new one, which records the
+// parent as a c2pa.ingredient.v3 assertion referenced by c2pa.opened.
+func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
+	if opts == nil {
+		return nil, ErrNoSigner
+	}
+	if err := opts.validate(p != nil); err != nil {
 		return nil, err
 	}
 	r := opts.rand()
@@ -91,10 +98,34 @@ func build(opts *Options, cfg buildConfig) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Manifest{Label: "urn:c2pa:" + id, opts: opts, sigLen: cfg.sigLen, digest: make([]byte, digestLen)}
+	m := &Manifest{Label: "urn:c2pa:" + id, opts: opts, sigLen: cfg.sigLen, digest: make([]byte, digestLen), external: opts.Sidecar}
 
-	// Assertions.
-	actionsCBOR, err := cbormode.Enc.Marshal(&assertion.Actions{Actions: opts.actions()})
+	// Assertions: the parent ingredient first, since c2pa.opened refers to it.
+	var created []*jumbf.Box
+	acts := opts.actions(p != nil)
+	if p != nil {
+		ingCBOR, err := p.ingredientCBOR()
+		if err != nil {
+			return nil, fmt.Errorf("sign: encode ingredient: %w", err)
+		}
+		ing, err := assertionBox(r, LabelIngredient, uuidCBOR, &jumbf.Box{Type: "cbor", Payload: ingCBOR})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := hashedURI(ing)
+		if err != nil {
+			return nil, err
+		}
+		params := map[string]any{}
+		for k, v := range acts[0].Parameters {
+			params[k] = v
+		}
+		params["ingredients"] = []any{ref}
+		acts = append([]assertion.Action(nil), acts...)
+		acts[0].Parameters = params
+		created = append(created, ing)
+	}
+	actionsCBOR, err := cbormode.Enc.Marshal(&assertion.Actions{Actions: acts})
 	if err != nil {
 		return nil, fmt.Errorf("sign: encode actions: %w", err)
 	}
@@ -102,13 +133,13 @@ func build(opts *Options, cfg buildConfig) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	hd, layout := encodeHashData(0, 0, nil)
+	hd, layout := m.encodeHashData(0, 0, nil)
 	m.layout = layout
 	m.hashData = &jumbf.Box{Type: "cbor", Payload: hd}
 	if m.hashSup, err = assertionBox(r, labelHashData, uuidCBOR, m.hashData); err != nil {
 		return nil, err
 	}
-	created := []*jumbf.Box{actionsSup, m.hashSup}
+	created = append(created, actionsSup, m.hashSup)
 	var gathered []*jumbf.Box
 	if t := opts.Thumbnail; t != nil {
 		thumb, err := assertionBox(r, labelThumbnail, uuidEmbedded,
@@ -170,7 +201,11 @@ func build(opts *Options, cfg buildConfig) (*Manifest, error) {
 		assertions,
 		superbox(uuidClaim, manifest.LabelClaimV2, m.claim),
 		superbox(uuidSignature, manifest.LabelSignature, m.sig))
-	m.Store = superbox(uuidStore, manifest.LabelStore, man)
+	var manifests []*jumbf.Box
+	if p != nil {
+		manifests = append(manifests, p.manifests...)
+	}
+	m.Store = superbox(uuidStore, manifest.LabelStore, append(manifests, man)...)
 	return m, nil
 }
 
@@ -199,8 +234,11 @@ func (m *Manifest) replacePayload(box *jumbf.Box, payload []byte) (patch, error)
 
 // SetExclusion fills in the hard-binding exclusion (step 4).
 func (m *Manifest) SetExclusion(start, length uint64) (patch, error) {
+	if m.external {
+		return patch{}, errors.New("sign: a manifest kept outside the file has no exclusion")
+	}
 	m.binding = [2]uint64{start, length}
-	b, _ := encodeHashData(start, length, m.digest)
+	b, _ := m.encodeHashData(start, length, m.digest)
 	return m.replacePayload(m.hashData, b)
 }
 
@@ -210,7 +248,7 @@ func (m *Manifest) SetDigest(digest []byte) (patch, error) {
 		return patch{}, fmt.Errorf("%w: digest %d bytes, want %d", ErrSizeMismatch, len(digest), digestLen)
 	}
 	m.digest = digest
-	b, _ := encodeHashData(m.binding[0], m.binding[1], digest)
+	b, _ := m.encodeHashData(m.binding[0], m.binding[1], digest)
 	return m.replacePayload(m.hashData, b)
 }
 

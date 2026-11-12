@@ -95,13 +95,15 @@ func (c *c2paSealTool) info() toolInfo {
 }
 
 func (c *c2paSealTool) run(path string, m mode) outcome {
-	var opts *verify.Options
+	// Like c2patool, read a sidecar and fetch a remote-only store
+	// (VerifyFile does the first; FetchRemote turns on the second).
+	opts := &verify.Options{FetchRemote: true}
 	if m == modeTrusted {
 		anchors, err := c2paseal.LoadTrustAnchors(c.anchors)
 		if err != nil {
 			return outcome{Err: err.Error()}
 		}
-		opts = &verify.Options{TrustAnchors: anchors}
+		opts.TrustAnchors = anchors
 	}
 	r := c2paseal.VerifyFile(path, opts)
 	var o outcome

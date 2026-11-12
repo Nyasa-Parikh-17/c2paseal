@@ -56,6 +56,13 @@ func TestFixtures(t *testing.T) {
 				}
 			}
 			st, err := Extract(b)
+			if f.External() {
+				// The store is in a sidecar or remote file, not in the image.
+				if !errors.Is(err, ErrNoManifest) {
+					t.Errorf("file with an external store: error %v, want ErrNoManifest", err)
+				}
+				return
+			}
 			if exp.Failed() {
 				if err == nil {
 					t.Fatalf("Extract succeeded; c2patool failed with %q", exp.C2patoolError)

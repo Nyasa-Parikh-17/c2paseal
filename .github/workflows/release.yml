@@ -1,0 +1,95 @@
+name: release
+
+# On a version tag: run the full checks, cross-compile the CLI for Linux,
+# macOS and Windows with CGO_ENABLED=0, check one binary on each OS, and
+# publish a GitHub release with the archives and SHA256SUMS.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2 # 2026.2.2; 2026.2.1 cannot read go1.27.4 export data
+          "$(go env GOPATH)/bin/staticcheck" ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # the tag, so the binary reports its version
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build archives
+        run: sh scripts/release.sh "${GITHUB_REF_NAME}" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # Unpack the native archive on each OS and run the binary against the
+  # bundled test PKI: sign, then verify as Trusted.
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux_amd64 }
+          - { os: macos-latest, target: darwin_arm64 }
+          - { os: windows-latest, target: windows_amd64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Unpack and run
+        run: |
+          base="c2paseal_${GITHUB_REF_NAME}_${{ matrix.target }}"
+          cd dist
+          if [ -f "$base.zip" ]; then unzip -q "$base.zip"; else tar -xzf "$base.tar.gz"; fi
+          cd "$base"
+          bin=./c2paseal; [ -f c2paseal.exe ] && bin=./c2paseal.exe
+          "$bin" version
+          "$bin" sign --cert testdata/pki/leaf-chain.pem --key testdata/pki/leaf.key --in "$GITHUB_WORKSPACE/testdata/unsigned/small.png" --out signed.png
+          "$bin" verify --trust testdata/pki/trust-anchors.pem signed.png | tee result.txt
+          grep -q "state: Trusted" result.txt
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes --verify-tag

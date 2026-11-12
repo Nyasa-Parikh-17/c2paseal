@@ -705,3 +705,54 @@ clean so far; it then finished clean).
   `testdata/unsigned/small.jpg` and `small.png`, press Sign.
 - `serve` needs `testdata/pki` (run from the repo root or pass `--pki`);
   the test keys are deliberately not embedded in the binary.
+
+### Phase 16 — Docs + release (2026-11-11)
+
+**Built**
+- GoDoc: every exported identifier in the public packages already had a
+  doc comment (checked with an AST scan); package overview in `doc.go`
+  expanded (entry points, reserve-and-backfill, scope, test PKI warning).
+- `example_test.go`: `ExampleRead`, `ExampleVerify`, `ExampleVerifyFile`,
+  `ExampleSign`, all with checked `// Output:`. `go doc -ex . Sign` (and
+  Read, Verify, VerifyFile) shows them.
+- README rewritten: what it is, scope table, limits (test certs untrusted
+  first), 10-line CLI quick start, library snippet, link to INTEROP.md.
+  The "gap" is stated carefully: richardwooding/c2pa (c2pa-mcp) also
+  documents pure-Go signing, so the README does not claim C2paSeal is the
+  only CGO-free signer (CLAUDE.md rule 9 spirit).
+- `scripts/release.sh <version>`: CGO_ENABLED=0 archives for linux, darwin,
+  windows × amd64, arm64, each with README, LICENSE and the TEST ONLY PKI
+  (so `serve` works unpacked), plus SHA256SUMS.
+- `.github/workflows/release.yml` on `v*` tags: test (build, vet,
+  staticcheck, test) → build archives → smoke test the native archive on
+  ubuntu, macos, windows (sign + verify Trusted) → `gh release create`.
+- `serve` listen errors now suggest `--addr`; README mentions it.
+
+**CI fix**
+- `ci.yml` has failed on every push since the repo was pushed: the
+  Staticcheck step (before Test) crashed on all three OSes with "export
+  data version 5 is greater than maximum supported version 4".
+  `setup-go` resolves `go 1.27` to go1.27.4 (local: 1.27.1) and
+  staticcheck 2026.2.1 (v0.8.1) cannot read its export data. Reproduced
+  locally with `GOTOOLCHAIN=go1.27.4`; staticcheck v0.8.2 (2026.2.2) runs
+  clean, and vet + the full test suite pass under go1.27.4. Pin bumped to
+  v0.8.2 in ci.yml and release.yml. CI's Test step has therefore never run
+  on GitHub until now.
+
+**Results**
+- README quick start run copy-pasted in a fresh clone (cloned from the
+  local repo, since that is the only change from the published URL):
+  build, sign, verify → Valid, verify --trust → Trusted, inspect, serve
+  (on this machine port 8080 is taken by the Oracle XE listener, so
+  `--addr 127.0.0.1:8090`). The library snippet compiles and prints
+  Trusted in a fresh module.
+- `scripts/release.sh` built all 6 archives locally; the Windows archive,
+  unpacked, signs and verifies Trusted with its bundled PKI. The version
+  string comes from VCS stamping (v0.1.0 at the tag).
+- Build, vet, staticcheck, full suite clean (go1.27.1 and go1.27.4).
+
+**Open — needs the user**
+- Release workflow "green" cannot be shown until the fix is pushed and a
+  tag exists. Next: push, confirm `ci` is green, then tag `v0.1.0` and push
+  the tag (ask first — PHASES.md).
+- Phase 15 browser check still pending.

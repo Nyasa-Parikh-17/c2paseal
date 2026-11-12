@@ -265,7 +265,7 @@ func serveCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	}
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
-		return c.fail(exitInvalid, fmt.Errorf("c2paseal serve: %w", err))
+		return c.fail(exitInvalid, fmt.Errorf("c2paseal serve: %w (is the port in use? pick another with --addr 127.0.0.1:8090)", err))
 	}
 	srv := &http.Server{
 		Handler:           web.Handler(cfg),

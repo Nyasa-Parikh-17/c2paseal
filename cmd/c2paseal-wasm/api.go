@@ -34,6 +34,11 @@
 //	    noHistory     boolean     replace an existing manifest store
 //	    ocspResponse  Uint8Array  DER OCSP response to staple
 //
+//	analyze(bytes, opts) → JSON string: the manifest store, the statuses
+//	  with their kinds, and the validation state, as the web app shows them
+//	  (the JSON of `c2paseal serve`'s /api/verify).
+//	  opts: name (string, the file name to report), trustAnchors (PEM string)
+//
 //	version() → JSON string, the shape of `c2paseal version --json`
 //
 // Bytes are Uint8Arrays. A bad option or a file that cannot be signed gives
@@ -44,12 +49,14 @@
 package main
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime/debug"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
@@ -135,6 +142,18 @@ func signJSON(b []byte, o signOptions) []byte {
 		Format: s.Format, ActiveManifest: s.Active.Label, Manifests: len(s.Manifests),
 		OCSPStapled: len(s.Active.Signature.OCSP) > 0, Data: signed,
 	})
+}
+
+// analyzeJSON returns the JSON for analyze(): what the web app shows.
+func analyzeJSON(b []byte, name, trustAnchors string) []byte {
+	var anchors []*x509.Certificate
+	if trustAnchors != "" {
+		var err error
+		if anchors, err = c2paseal.ParseTrustAnchors([]byte(trustAnchors)); err != nil {
+			return errorJSON(fmt.Errorf("trustAnchors: %w", err))
+		}
+	}
+	return marshal(analysis.Analyse(name, b, anchors))
 }
 
 // versionJSON returns the JSON for version().

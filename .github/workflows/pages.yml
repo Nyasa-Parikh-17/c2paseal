@@ -1,0 +1,65 @@
+name: pages
+
+# Builds the web app (web/site plus the WebAssembly build) and deploys it to
+# GitHub Pages. The repository's Pages source must be "GitHub Actions"
+# (Settings → Pages), once.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # The same checks as ci's wasm job, so a broken app is never deployed.
+      - name: Test the app in headless Chrome
+        env:
+          C2PASEAL_BROWSER_TEST: "1"
+        run: go test -run 'TestWasmSize|TestBrowser|TestSite' ./cmd/c2paseal-wasm
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r web/site/. _site/
+          GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o _site/c2paseal.wasm ./cmd/c2paseal-wasm
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/
+          # A new cache name per deployment, so browsers replace the old one.
+          version="${GITHUB_SHA::12}"
+          sed -i "s/^const VERSION = \"dev\";$/const VERSION = \"$version\";/" _site/sw.js
+          grep -q "^const VERSION = \"$version\";$" _site/sw.js
+          {
+            echo "site: $(du -sb _site | cut -f1) bytes in $(find _site -type f | wc -l) files"
+            echo "c2paseal.wasm: $(wc -c < _site/c2paseal.wasm) bytes, $(gzip -9 -c _site/c2paseal.wasm | wc -c) gzipped"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

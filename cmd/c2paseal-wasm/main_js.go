@@ -41,6 +41,15 @@ func exports() js.Value {
 		}
 		return string(signJSON(b, so))
 	}))
+	api.Set("analyze", js.FuncOf(func(_ js.Value, args []js.Value) (out any) {
+		defer recoverTo(&out)
+		b, err := bytesArg(args, 0, "bytes")
+		if err != nil {
+			return string(errorJSON(err))
+		}
+		o := optsArg(args)
+		return string(analyzeJSON(b, str(o, "name"), str(o, "trustAnchors")))
+	}))
 	api.Set("version", js.FuncOf(func(js.Value, []js.Value) any { return string(versionJSON()) }))
 	return api
 }

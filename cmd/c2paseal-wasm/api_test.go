@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
@@ -183,4 +185,25 @@ func keys(m map[string]json.RawMessage) []string {
 		k = append(k, s)
 	}
 	return k
+}
+
+// TestAnalyzeJSON checks that analyze() is the web app's JSON: the same as
+// `serve`'s /api/verify for the same file.
+func TestAnalyzeJSON(t *testing.T) {
+	anchorsPEM := readFile(t, "pki/trust-anchors.pem")
+	anchors, _ := c2paseal.ParseTrustAnchors(anchorsPEM)
+	b := readFile(t, "signed/small.jpg")
+	for _, trust := range []bool{false, true} {
+		pem, a := "", []*x509.Certificate(nil)
+		if trust {
+			pem, a = string(anchorsPEM), anchors
+		}
+		want, _ := json.Marshal(analysis.Analyse("small.jpg", b, a))
+		if got := analyzeJSON(b, "small.jpg", pem); string(got) != string(want) {
+			t.Errorf("trust=%v: analyze() differs from analysis.Analyse:\n got %.300s\nwant %.300s", trust, got, want)
+		}
+	}
+	if e := errorOf(t, analyzeJSON(b, "x", "not PEM")); !strings.HasPrefix(e, "trustAnchors: ") {
+		t.Errorf("bad anchors: %q", e)
+	}
 }

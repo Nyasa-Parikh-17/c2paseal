@@ -245,27 +245,7 @@ func TestBrowser(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	profile, err := os.MkdirTemp("", "c2paseal-chrome-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(profile) // best effort: Chrome's helpers may still hold files on Windows
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, chrome,
-		"--headless=new", "--no-sandbox", "--disable-gpu", "--disable-extensions",
-		"--no-first-run", "--no-default-browser-check", "--disable-background-networking",
-		"--user-data-dir="+profile, srv.URL+"/")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		cmd.Process.Kill()
-		cmd.Wait()
-	}()
-
+	ctx, stderr := startChrome(t, chrome, srv.URL+"/")
 	var rep report
 	select {
 	case rep = <-got:
@@ -297,6 +277,34 @@ func stateOf(t *testing.T, out string) verify.State {
 		t.Fatalf("not verify() JSON: %.200s", out)
 	}
 	return r.State
+}
+
+// startChrome opens url in headless Chrome with a fresh profile until the
+// test ends. The context ends at the test's time limit for the browser.
+func startChrome(t *testing.T, chrome, url string) (context.Context, *bytes.Buffer) {
+	t.Helper()
+	profile, err := os.MkdirTemp("", "c2paseal-chrome-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	cmd := exec.CommandContext(ctx, chrome,
+		"--headless=new", "--no-sandbox", "--disable-gpu", "--disable-extensions",
+		"--no-first-run", "--no-default-browser-check", "--disable-background-networking",
+		"--user-data-dir="+profile, url)
+	stderr := new(bytes.Buffer)
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+		cancel()
+		os.RemoveAll(profile) // best effort: Chrome's helpers may still hold files on Windows
+	})
+	return ctx, stderr
 }
 
 // findChrome returns $C2PASEAL_CHROME or the first Chrome or Chromium found.

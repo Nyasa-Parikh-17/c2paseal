@@ -1,0 +1,96 @@
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1c1c1a; --muted: #5d5d58; --border: #d9d9d4;
+  --ok: #1d7a3c; --ok-bg: #e5f4ea; --info: #8a5a00; --info-bg: #fbf1dc; --bad: #b3261e; --bad-bg: #fbe6e4;
+  --accent: #2f5bd3; --warn-bg: #fff4cc; --warn-border: #e0b400; --warn: #7a5300; --none-bg: #ececea;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #20201e; --text: #ececea; --muted: #a5a59f; --border: #3a3a36;
+    --ok: #6fd18f; --ok-bg: #173322; --info: #f0c060; --info-bg: #3a2e12; --bad: #ff8a80; --bad-bg: #3d1a17;
+    --accent: #8ab0ff; --warn-bg: #3a3212; --warn-border: #a88600; --warn: #f5cf5a; --none-bg: #2c2c29;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.6rem; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 20px 0 8px; }
+p { margin: 0 0 8px; }
+.lead { color: var(--muted); }
+.where { color: var(--muted); font-size: .9rem; }
+.where.error { color: var(--bad); }
+a { color: var(--accent); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 20px 0 16px; }
+.tabs button { font: inherit; padding: 8px 14px; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0;
+  background: none; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { background: var(--panel); color: var(--text); border-color: var(--border); font-weight: 600; }
+
+/* display: block, not the label's default inline: inline padding does not
+   take up space, so the drop zone's top padding overlapped what is above. */
+.drop { display: block; border: 2px dashed var(--border); border-radius: 12px; background: var(--panel); padding: 32px 16px; text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); }
+.drop input { display: none; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin: 12px 0; }
+.busy { color: var(--muted); font-size: .9rem; }
+button.primary, #sign-sample, button.again { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+.pick { color: var(--muted); font-size: .9rem; }
+.pick input { max-width: 100%; }
+
+.testonly { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+.sample { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.sample img { border-radius: 8px; border: 1px solid var(--border); height: auto; max-width: 100%; }
+.sample > div { flex: 1 1 280px; min-width: 0; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-top: 16px; min-width: 0; }
+.meta { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+
+/* The status banner: one of valid, untrusted signer, tampered or invalid,
+   no Content Credentials. */
+.status { border-radius: 10px; padding: 12px 16px; margin: 8px 0 12px; border-left: 6px solid; }
+.status h3 { margin: 0 0 4px; font-size: 1.1rem; }
+.status p { margin: 0; }
+.status.valid { background: var(--ok-bg); border-color: var(--ok); }
+.status.valid h3 { color: var(--ok); }
+.status.untrusted { background: var(--warn-bg); border-color: var(--warn-border); }
+.status.untrusted h3 { color: var(--warn); }
+.status.invalid { background: var(--bad-bg); border-color: var(--bad); }
+.status.invalid h3 { color: var(--bad); }
+.status.none { background: var(--none-bg); border-color: var(--border); }
+.status.none h3 { color: var(--muted); }
+.status.error { background: var(--bad-bg); border-color: var(--bad); }
+
+ul.statuses { list-style: none; padding: 0; margin: 0 0 12px; }
+ul.statuses li { border-left: 4px solid var(--border); padding: 4px 10px; margin: 4px 0; border-radius: 4px; }
+/* ul.statuses in front, so these outrank the default border above. */
+ul.statuses li.success { border-color: var(--ok); background: var(--ok-bg); }
+ul.statuses li.informational { border-color: var(--info); background: var(--info-bg); }
+ul.statuses li.failure { border-color: var(--bad); background: var(--bad-bg); }
+ul.statuses li.warning { border-color: var(--warn-border); background: var(--warn-bg); }
+ul.statuses li.warning .label { color: var(--warn); font-weight: 600; }
+ul.statuses li.neutral { border-color: var(--border); }
+li code { font-weight: 600; overflow-wrap: anywhere; }
+li .why { display: block; color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+li .scope { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+
+details { margin: 8px 0; }
+details > summary { cursor: pointer; font-weight: 600; }
+pre.raw { font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; overflow: auto; max-height: 480px; white-space: pre; }
+
+/* Provenance graph: each manifest is a card; its ingredients hang below it,
+   joined by lines. */
+ul.graph, ul.graph ul { list-style: none; margin: 0; padding: 0; }
+ul.graph ul { margin-left: 18px; padding-left: 18px; border-left: 2px solid var(--border); }
+ul.graph li { position: relative; margin: 8px 0; }
+ul.graph ul > li::before { content: ""; position: absolute; left: -18px; top: 20px; width: 16px; border-top: 2px solid var(--border); }
+.node { display: inline-block; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+.node.current { border-color: var(--accent); }
+.node .title { font-weight: 600; overflow-wrap: anywhere; }
+.node .rel { font-size: .8rem; color: var(--accent); margin-right: 6px; }
+.node .meta { display: block; font-size: .82rem; }
+
+a.download { display: inline-block; margin: 4px 16px 4px 0; }
+footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }

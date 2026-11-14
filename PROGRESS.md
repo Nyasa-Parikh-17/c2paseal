@@ -27,6 +27,9 @@ Scope-creep ideas go here instead of being built.
   in Phase 18, CreativeWork and other assertions,
   signing with algorithms other than ES256 (verifying them was approved and
   added in Phase 19), keys in HSMs beyond crypto.Signer.
+- Web app: load your own trust list (for example the official C2PA trust
+  list PEM) in the browser and keep it between visits; today the app trusts
+  the demo root or nothing.
 - Test PKI: add the `c2pa-kp-claimSigning` EKU (1.3.6.1.4.1.62558.2.1) to
   the TEST ONLY signer. C2PA 2.4 §14.4.1 recommends it, and Credentio
   trusts anchors only for it, so today it stops at `signingCredential.invalid`
@@ -1409,3 +1412,114 @@ on CI, negative set, fuzz summary). The CHANGELOG date was set in commit
   Phase 23, where it is used.
 - The `.wasm` is not in the release archives yet; Phase 23 deploys it with
   the site.
+
+### Phase 22 — CI result (2026-11-14)
+
+Pushed with the v0.2.0 tag. ci run 43581089917 passed on GitHub, including
+the new `wasm` job: c2paseal.wasm was 14,508,672 bytes, 3,712,574 gzipped
+(`gzip -9`, 3,751,578 with Go's gzip, 89% of the budget), and TestBrowser
+passed 13/13 in Chrome 157 on Linux. Phase 22 is done. The release run
+43581110817 passed, and v0.2.0 is published with 7 assets.
+
+### Phase 23 — Static web app on GitHub Pages (2026-11-14)
+
+**Built**
+- `web/site/`, the static app: `index.html`, `app.js`, `app.css`, `sw.js`,
+  `icon.svg`, plus `demo/` (byte-exact copies of the TEST ONLY chain, key
+  and root, and `testdata/unsigned/large.jpg` as the sample).
+  - Tabs: "Verify a file" (drag-and-drop or file picker, an option to also
+    trust the demo root) and "Sign a sample" (the sample or your own file,
+    plus "Sign the signed file again" to show the edit history).
+  - Status banner, chosen from the library's statuses and state only:
+    - valid ("Valid, trusted signer" or "Valid");
+    - signer not on your trust list (Valid with
+      `signingCredential.untrusted`);
+    - "Changed since it was signed" (Invalid with a data hash, hashed URI
+      or claim signature mismatch on the active manifest);
+    - "Content Credentials not valid" (any other Invalid);
+    - "No Content Credentials" (the Phase 21 rule).
+  - Wording as in the spec: "Signed by X (certificate issued by Y),
+    unmodified since <time-stamp time>". Without a time-stamp it says the
+    time is not known. The test fails if the visible text says real, true,
+    genuine, authentic or fake.
+  - Provenance graph: manifest cards, with ingredients hanging below them
+    (`activeManifest` / `c2pa_manifest` links, so v1 files work too).
+    Ingredients without a manifest are leaves.
+  - Raw manifest store (pretty JSON) and the status list, collapsible.
+  - Kept from Phase 21: the drop zone is a block, the per-kind status
+    colours, the untrusted signer shown as a warning, links in the accent
+    colour.
+  - The CSP is in a meta tag (Pages cannot send headers) and in serve's
+    header. It is `script-src 'self' 'wasm-unsafe-eval'`, with no inline
+    script or style. A test checks that the two are the same.
+- Engines (`app.js`): if `c2paseal.wasm` is there, it is loaded and
+  `globalThis.c2paseal.analyze/sign` are used. Otherwise (under `serve`)
+  `api/verify` and `api/sign` are used. Both return the JSON of the new
+  `internal/analysis` package (moved out of `web`, without net/http). The
+  WebAssembly build gained `analyze(bytes, {name, trustAnchors})`; a test
+  checks that it gives the same JSON.
+- Offline: `sw.js` caches every app file, including the `.wasm`, and
+  serves from the cache first. app.js registers it only with the
+  WebAssembly engine. The pages workflow replaces its VERSION with the
+  commit, so each deployment gets a new cache and drops the old one. A test
+  checks that the ASSETS list and the site's files match.
+- `serve` embeds the same site (`web.Site()`, `http.FileServerFS`). The
+  `web` types are now aliases of `internal/analysis`, so the package API is
+  unchanged except for the new `Site` and `ContentSecurityPolicy`.
+  `.gitattributes` keeps `web/site/demo/**` byte-exact; `TestDemoPKI`
+  compares those files with `testdata`.
+- `TestSite` (cmd/c2paseal-wasm, `C2PASEAL_BROWSER_TEST=1`). A test page
+  loads the real app in an iframe at `/app/` (a subpath, as on Pages) and
+  drives it:
+  - 8 dropped files (untrusted, trusted PNG, time-stamped, tampered JPEG
+    and PNG, expired signer, no credentials, the 1.x edit history CACA.jpg)
+    with the expected banner, text and graph;
+  - the Sign tab: sign the sample, then sign it again (1, then 2
+    manifests). The downloaded files are checked in Go: Trusted under the
+    demo root;
+  - offline: once the service worker controls the app, the server answers
+    503 for `/app/`, the app is reloaded, and a verify and a sign must
+    still work. No app request may reach the server.
+  - The same page and checks also run against `web.Handler`, which proves
+    the serve fallback.
+- CI: the `wasm` job also runs TestSite. New `pages.yml` (push to main, or
+  by hand) runs the browser tests, assembles `_site` (site, `.wasm`,
+  `wasm_exec.js`, stamped `sw.js`), writes the sizes to the step summary,
+  and deploys with `configure-pages@v6`, `upload-pages-artifact@v5` and
+  `deploy-pages@v5`, all checked to run on node24 or composite.
+- README: the site link, and how serve and Pages share the site.
+  CHANGELOG: under Unreleased.
+
+**Results (local)**
+- TestSite passes in both engines, 8 times in a row. The first version was
+  flaky: "Sign the sample" fetched the sample before registering the
+  operation, so `whenIdle()` could resolve early. Fixed in app.js, where it
+  was a real ordering bug in the test hook.
+- Mutation check: a service worker that always goes to the network fails
+  the offline test.
+- Screenshots (scratchpad script over the DevTools protocol, site served
+  under `/c2paseal/`): every state in light and dark, at 1100 px and 390 px,
+  inspected. No horizontal overflow, no console errors or warnings.
+  - With Chrome's network emulation set to offline, a reload loads the app
+    from the service worker and verifies a file.
+  - Fixed after looking: the Sign tab said "drop your own file on the
+    button", but it is a file picker.
+- Sizes: c2paseal.wasm 14.54 MB, 3.76 MB gzipped with Go's gzip (90% of
+  the budget; `analyze` added about 12 KB). The rest of the site is 187 KB
+  (the sample image is 157 KB).
+- gofmt, build, vet and staticcheck (host and js/wasm) and the full suite
+  are clean. Coverage: web 84.8%, internal/analysis 88.2%,
+  cmd/c2paseal-wasm 87.2%.
+
+**Not done here (needs the user)**
+- Turn on Pages with "GitHub Actions" as the source, then push. The site
+  must be live, and work offline, at
+  https://nyasa-parikh-17.github.io/c2paseal/.
+- Gate E: report the URL, the browser check and the size, then ask before
+  tagging `v0.3.0` (set the CHANGELOG date first).
+
+**Open issues**
+- The app trusts only the demo root (or nothing). Choosing your own trust
+  list file, such as the official C2PA list, is in Future work. Without it,
+  files from real cameras show "Signer not on your trust list".
+- Whether Pages compresses `.wasm` will be known after the first deploy.

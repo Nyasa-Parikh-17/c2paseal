@@ -1,27 +1,48 @@
-// Package web serves the C2paSeal demo UI: drop an image, see its manifest
+// Package web serves the C2paSeal demo app: drop an image, see its manifest
 // store and validation statuses, sign it with the TEST ONLY PKI and see the
-// re-verified result. All logic is in the library; the embedded page only
-// renders the JSON these handlers return.
+// re-verified result.
+//
+// The app is the static site in site/, the same one deployed to GitHub
+// Pages. There it runs the library as WebAssembly; served from here it has
+// no c2paseal.wasm and uses this package's HTTP API instead, which returns
+// the same JSON (package internal/analysis builds it for both).
 package web
 
 import (
 	"crypto"
 	"crypto/x509"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
-	"github.com/Nyasa-Parikh-17/c2paseal/verify"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
 )
 
-//go:embed index.html
-var indexHTML []byte
+//go:embed site
+var siteFS embed.FS
+
+// Site is the static web app: index.html, its script, style and service
+// worker, and the TEST ONLY demo PKI and sample image under demo/. Deploying
+// it needs c2paseal.wasm and wasm_exec.js next to index.html (see the pages
+// workflow); without them the app uses the HTTP API of Handler.
+func Site() fs.FS {
+	sub, err := fs.Sub(siteFS, "site")
+	if err != nil {
+		panic(err) // the embedded directory is always there
+	}
+	return sub
+}
+
+// ContentSecurityPolicy is sent with every page and also set in
+// index.html's meta tag, for hosts that cannot send headers (GitHub Pages).
+// 'wasm-unsafe-eval' lets the page compile c2paseal.wasm and nothing else.
+const ContentSecurityPolicy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'"
 
 // MaxUpload is the largest file the demo accepts.
 const MaxUpload = 32 << 20
@@ -51,39 +72,17 @@ func LoadTestPKI(dir string) (*Config, error) {
 }
 
 // Analysis is what the page shows for one file.
-type Analysis struct {
-	File   string `json:"file"`
-	Size   int    `json:"size"`
-	Format string `json:"format"`
-	// ManifestStore is the store as `c2patool --detailed` prints it.
-	ManifestStore json.RawMessage `json:"manifest_store,omitempty"`
-	ReadError     string          `json:"read_error,omitempty"`
-	// Statuses flattens the validation results with each status's kind
-	// (success, informational, failure) so the page only has to colour them.
-	Statuses []StatusView `json:"statuses"`
-	State    verify.State `json:"validation_state"`
-	Trusted  bool         `json:"trusted_test_root"`
-	Signed   *SignedFile  `json:"signed,omitempty"`
-}
+type Analysis = analysis.Analysis
 
 // StatusView is one validation status for display.
-type StatusView struct {
-	Scope       string `json:"scope"` // "active manifest" or the ingredient assertion URI
-	Kind        string `json:"kind"`
-	Code        string `json:"code"`
-	URL         string `json:"url,omitempty"`
-	Explanation string `json:"explanation,omitempty"`
-}
+type StatusView = analysis.StatusView
 
 // SignedFile is a file the demo signed, returned inline.
-type SignedFile struct {
-	Name string `json:"name"`
-	Data []byte `json:"data"` // base64 in JSON
-}
+type SignedFile = analysis.SignedFile
 
 // Handler returns the demo's HTTP handler:
 //
-//	GET  /            the page
+//	GET  /            the static site (Site), index.html at /
 //	POST /api/verify  analyse an uploaded file (multipart field "file")
 //	POST /api/sign    sign it with the test PKI and analyse the result
 //
@@ -91,10 +90,11 @@ type SignedFile struct {
 // root.
 func Handler(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'")
-		w.Write(indexHTML)
+	static := http.FileServerFS(Site())
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", ContentSecurityPolicy)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		static.ServeHTTP(w, r)
 	})
 	mux.HandleFunc("POST /api/verify", func(w http.ResponseWriter, r *http.Request) {
 		name, b, trust, err := upload(w, r)
@@ -102,7 +102,7 @@ func Handler(cfg *Config) http.Handler {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, analyse(name, b, trustAnchors(cfg, trust)))
+		writeJSON(w, analysis.Analyse(name, b, trustAnchors(cfg, trust)))
 	})
 	mux.HandleFunc("POST /api/sign", func(w http.ResponseWriter, r *http.Request) {
 		if cfg == nil || cfg.Signer == nil {
@@ -119,8 +119,8 @@ func Handler(cfg *Config) http.Handler {
 			writeError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
-		out := signedName(name)
-		a := analyse(out, signed, trustAnchors(cfg, trust))
+		out := analysis.SignedName(name)
+		a := analysis.Analyse(out, signed, trustAnchors(cfg, trust))
 		a.Signed = &SignedFile{Name: out, Data: signed}
 		writeJSON(w, a)
 	})
@@ -132,30 +132,6 @@ func trustAnchors(cfg *Config, trust bool) []*x509.Certificate {
 		return nil
 	}
 	return cfg.Anchors
-}
-
-// analyse reads and verifies b with the library.
-func analyse(name string, b []byte, anchors []*x509.Certificate) *Analysis {
-	a := &Analysis{File: name, Size: len(b), Format: c2paseal.DetectFormat(b), Trusted: anchors != nil}
-	if s, err := c2paseal.ReadBytes(b); err != nil {
-		a.ReadError = err.Error()
-	} else if j, err := json.Marshal(s); err != nil {
-		a.ReadError = err.Error()
-	} else {
-		a.ManifestStore = j
-	}
-	r := c2paseal.VerifyBytes(b, &c2paseal.VerifyOptions{TrustAnchors: anchors})
-	add := func(scope string, ss []verify.Status) {
-		for _, s := range ss {
-			a.Statuses = append(a.Statuses, StatusView{Scope: scope, Kind: s.Kind().String(), Code: s.Code, URL: s.URL, Explanation: s.Explanation})
-		}
-	}
-	add("active manifest", r.ActiveManifest)
-	for _, d := range r.IngredientDeltas {
-		add(d.IngredientAssertionURI, d.ValidationDeltas)
-	}
-	a.State = r.State()
-	return a
 }
 
 // upload reads the multipart "file" field and the "trust" flag.
@@ -177,12 +153,6 @@ func upload(w http.ResponseWriter, r *http.Request) (string, []byte, bool, error
 		return "", nil, false, fmt.Errorf("file larger than %d MB", MaxUpload>>20)
 	}
 	return filepath.Base(h.Filename), b, r.FormValue("trust") == "1", nil
-}
-
-// signedName turns photo.jpg into photo.signed.jpg.
-func signedName(name string) string {
-	ext := filepath.Ext(name)
-	return strings.TrimSuffix(name, ext) + ".signed" + ext
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -12,6 +12,24 @@ before v1.0.0 a minor version may change the API.
   headless Chrome on JPEG and PNG files.
 - `ParseSigner`, `ParseTrustAnchors`, `ParseAllowedList` and
   `ParseTrustConfig`: the `Load*` functions on bytes instead of paths.
+- **Web app on GitHub Pages** (<https://nyasa-parikh-17.github.io/c2paseal/>):
+  drag-and-drop verify with a status banner (valid, signer not on your trust
+  list, changed since signing or otherwise not valid, no Content
+  Credentials) worded as the spec does ("signed by X, unmodified since …"),
+  a provenance graph of the manifests and their ingredients, the raw
+  manifest store, and a "Sign a sample" tab with the TEST ONLY demo
+  certificate. Everything runs in the browser; a service worker keeps it
+  working offline.
+- `analyze(bytes, opts)` in the WebAssembly build: the JSON the web app
+  shows.
+
+### Changed
+- `c2paseal serve` serves the same web app (embedded) and answers it
+  through its HTTP API, which returns the same JSON as the WebAssembly
+  build. Its page now sends a stricter Content-Security-Policy (no inline
+  script or style). In package `web`, `Analysis`, `StatusView` and
+  `SignedFile` are now aliases of the shared types, and `Site` returns the
+  embedded site.
 
 ## v0.2.0 — 2026-11-14
 

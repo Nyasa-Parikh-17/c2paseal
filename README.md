@@ -32,6 +32,11 @@ statuses (see [INTEROP.md](INTEROP.md)).
 Dependencies: the Go standard library plus `fxamacker/cbor`,
 `veraison/go-cose` and `digitorus/timestamp`.
 
+**Try it in the browser:** <https://nyasa-parikh-17.github.io/c2paseal/>.
+The web app runs the library as WebAssembly, so files stay on your machine;
+after the first visit it also works offline. Its "Sign a sample" tab uses
+the TEST ONLY demo certificate, whose private key is public.
+
 ## Quick start
 
 Requires Go 1.27 or newer. From a clone of this repository (the test
@@ -47,7 +52,7 @@ CGO_ENABLED=0 go build -o c2paseal ./cmd/c2paseal
 ./c2paseal inspect signed.jpg                                         # manifest store as JSON
 ./c2paseal verify --json --recursive photos/                          # one JSON line per file
 ./c2paseal verify --trust C2PA-TRUST-LIST.pem --trust C2PA-TSA-TRUST-LIST.pem photo.jpg  # official trust lists
-./c2paseal serve                                                      # demo UI: http://127.0.0.1:8080/
+./c2paseal serve                                                      # web app: http://127.0.0.1:8080/
 ```
 
 On Windows PowerShell, build with
@@ -112,7 +117,13 @@ console.log(result.validation_state); // Invalid, Valid or Trusted
 
 Files stay in the page; the browser build makes no network requests, so it
 has no time-stamping, remote manifests or online OCSP. The options are in
-`go doc ./cmd/c2paseal-wasm`. `ParseSigner`, `ParseTrustAnchors`,
+`go doc ./cmd/c2paseal-wasm`, which also documents `analyze(bytes, opts)`,
+the JSON the web app displays.
+
+The web app is the static site in `web/site`. The `pages` workflow deploys
+it with `c2paseal.wasm` and `wasm_exec.js`; `c2paseal serve` embeds the
+same site and, having no `.wasm`, answers its requests through an HTTP API
+that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
 `ParseAllowedList` and `ParseTrustConfig` are the byte-level versions of the
 `Load*` functions, for code without files.
 

@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>c2paseal site test</title>
+<!-- Served by TestSite at /__test/. Loads the real web app from /app/ in an
+     iframe, drives it like a person (drop events, clicks), reads what it
+     shows, and POSTs that to /__test/result. With ?offline=1 it then turns
+     the server off for /app/, reloads the app and checks it still works. -->
+<body>
+<iframe id="app" style="width: 1000px; height: 900px"></iframe>
+<script>
+(async () => {
+  const report = (body) => fetch("/__test/result", { method: "POST", body: JSON.stringify(body) });
+  window.addEventListener("error", (e) => report({ error: "harness error: " + e.message }));
+  const params = new URLSearchParams(location.search);
+  const frame = document.getElementById("app");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function load() {
+    await new Promise((resolve) => { frame.onload = resolve; frame.src = "/app/?t=" + Date.now(); });
+    for (let i = 0; i < 200 && !frame.contentWindow.c2pasealApp; i++) await sleep(25);
+    const app = frame.contentWindow.c2pasealApp;
+    if (!app) throw new Error("the app did not define c2pasealApp");
+    return { app, mode: await app.ready, doc: frame.contentDocument, win: frame.contentWindow };
+  }
+
+  // drop dispatches a real drop event carrying the file on the drop zone.
+  function drop(ctx, target, name, bytes) {
+    const dt = new ctx.win.DataTransfer();
+    dt.items.add(new ctx.win.File([bytes], name, { type: name.endsWith(".png") ? "image/png" : "image/jpeg" }));
+    target.dispatchEvent(new ctx.win.DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    target.dispatchEvent(new ctx.win.DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }
+
+  // shown reads what a result area shows.
+  async function shown(ctx, id) {
+    await ctx.app.whenIdle();
+    const area = ctx.doc.getElementById(id);
+    const panel = area.querySelector(".panel");
+    const status = area.querySelector(".status");
+    const link = area.querySelector("a.download");
+    const out = {
+      file: panel ? panel.dataset.file : "",
+      state: status ? status.dataset.state || status.className : "",
+      title: status ? status.querySelector("h3").textContent : "",
+      text: status ? status.querySelector("p").textContent : "",
+      graphNodes: area.querySelectorAll(".graph .node").length,
+      graphManifests: area.querySelectorAll(".graph .node .meta").length ? [...area.querySelectorAll(".graph .node .meta")].filter((m) => /urn:c2pa:/.test(m.textContent)).length : 0,
+      rawJSON: !!area.querySelector("pre.raw"),
+      statuses: area.querySelectorAll("ul.statuses li").length,
+      visibleText: panel ? [...panel.childNodes].filter((n) => !(n.tagName === "DETAILS" && n.querySelector("pre.raw"))).map((n) => n.textContent).join(" ") : "",
+    };
+    if (link) {
+      const b = new Uint8Array(await (await fetch(link.href)).arrayBuffer());
+      let s = ""; for (const c of b) s += String.fromCharCode(c);
+      out.download = btoa(s);
+      out.downloadName = link.download;
+    }
+    return out;
+  }
+
+  try {
+    const cases = await (await fetch("/__test/cases.json")).json();
+    let ctx = await load();
+    const result = { mode: ctx.mode, where: ctx.doc.getElementById("where").textContent, verify: [], sign: [] };
+
+    for (const c of cases.verify) {
+      ctx.doc.getElementById("trust").checked = !!c.trust; // no change event: set before dropping
+      const bytes = new Uint8Array(await (await fetch("/__test/f/" + c.file)).arrayBuffer());
+      drop(ctx, ctx.doc.getElementById("drop"), c.file.split("/").pop(), bytes);
+      await sleep(10);
+      result.verify.push({ name: c.name, ...(await shown(ctx, "result-verify")) });
+    }
+
+    ctx.doc.getElementById("tab-sign").click();
+    result.signTabVisible = !ctx.doc.getElementById("pane-sign").hidden && ctx.doc.getElementById("pane-verify").hidden;
+    ctx.doc.getElementById("sign-sample").click();
+    await sleep(10);
+    result.sign.push({ name: "sample", ...(await shown(ctx, "result-sign")) });
+    const again = ctx.doc.querySelector("#result-sign button.again");
+    if (again) {
+      again.click();
+      await sleep(10);
+      result.sign.push({ name: "again", ...(await shown(ctx, "result-sign")) });
+    }
+
+    if (params.get("offline") === "1") {
+      // Wait until the service worker controls the app, then cut the server
+      // off and load the app again.
+      const sw = ctx.win.navigator.serviceWorker;
+      await sw.ready;
+      for (let i = 0; i < 200 && !sw.controller; i++) await sleep(25);
+      if (!sw.controller) { ctx = await load(); await ctx.win.navigator.serviceWorker.ready; }
+      result.controlled = !!ctx.win.navigator.serviceWorker.controller;
+      await fetch("/__test/offline", { method: "POST" });
+      ctx = await load();
+      result.offline = { mode: ctx.mode };
+      const c = cases.offline;
+      const bytes = new Uint8Array(await (await fetch("/__test/f/" + c.file)).arrayBuffer());
+      ctx.doc.getElementById("trust").checked = !!c.trust;
+      drop(ctx, ctx.doc.getElementById("drop"), c.file.split("/").pop(), bytes);
+      await sleep(10);
+      result.offline.verify = { name: c.name, ...(await shown(ctx, "result-verify")) };
+      ctx.doc.getElementById("tab-sign").click();
+      ctx.doc.getElementById("sign-sample").click();
+      await sleep(10);
+      result.offline.sign = { name: "sample offline", ...(await shown(ctx, "result-sign")) };
+    }
+    await report(result);
+  } catch (e) {
+    await report({ error: String(e && e.stack || e) });
+  }
+})();
+</script>
+</body>

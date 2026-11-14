@@ -36,11 +36,12 @@ jobs:
       - name: Test
         run: go test ./...
 
-  # The WebAssembly build (cmd/c2paseal-wasm): built once with the release
-  # flags, held to its size budget and run in headless Chrome, which the
-  # Ubuntu 24.04 runner image includes. No browser test tool is installed:
-  # TestBrowser starts Chrome itself and reads the results the page POSTs
-  # back to the test's HTTP server.
+  # The WebAssembly build (cmd/c2paseal-wasm) and the web app over it: built
+  # once with the release flags, held to its size budget and run in headless
+  # Chrome, which the Ubuntu 24.04 runner image includes. No browser test
+  # tool is installed: the tests start Chrome themselves and read the
+  # results their test pages POST back. TestSite drives the web app (also
+  # offline, and under serve).
   wasm:
     runs-on: ubuntu-24.04
     steps:
@@ -60,13 +61,13 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           GOOS=js GOARCH=wasm go vet ./cmd/c2paseal-wasm
           GOOS=js GOARCH=wasm "$(go env GOPATH)/bin/staticcheck" ./cmd/c2paseal-wasm
-      - name: Size budget and browser test
+      - name: Size budget and browser tests
         env:
           C2PASEAL_WASM: ${{ github.workspace }}/dist-wasm/c2paseal.wasm
           C2PASEAL_BROWSER_TEST: "1"
         run: |
           google-chrome --version
-          go test -v -run 'TestWasmSize|TestBrowser' ./cmd/c2paseal-wasm
+          go test -v -run 'TestWasmSize|TestBrowser|TestSite' ./cmd/c2paseal-wasm
       - uses: actions/upload-artifact@v7
         with:
           name: c2paseal-wasm

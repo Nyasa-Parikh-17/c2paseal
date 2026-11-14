@@ -1766,3 +1766,17 @@ is a valid sample: the test's grammar had no `-` in the exponent, and on
 Windows the durations round to 0, so it never showed locally. The pattern
 now follows Go's float format (and NaN/±Inf), and a new TestSampleGrammar
 pins it. The image steps had not run (they come after the tests).
+
+### Phase 25 — CI green (2026-11-14)
+
+ci run 43598198487 passed, all seven jobs. In the `sealsvc` job:
+- The tests: c2patool says Valid/Trusted for files signed through the
+  server, including through the fake AWS KMS (TestKMSEndToEnd). This is the
+  phase's CI check.
+- The image ran read-only with `--cap-drop ALL`: healthz ok; signed over
+  HTTP with curl; c2patool `validation_state == "Trusted"` (true);
+  /v1/verify Trusted (true); a request without a key got 401;
+  `docker exec … healthcheck` printed ok; the user is nonroot. The start and
+  sign audit records are in the container log.
+
+Phase 25 now waits at gate F: v0.4.0 needs the user's approval.

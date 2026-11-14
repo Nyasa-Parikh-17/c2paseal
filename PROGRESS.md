@@ -1309,3 +1309,11 @@ close it later.
   checks), and its trusted mode stops at the EKU. See Future work
   (claimSigning EKU).
 - The browser check script is not in the repo (it needs Node and Chrome).
+
+### Phase 21 — cross-OS reproducibility check (2026-11-14)
+
+Commit d75f81a, cloned fresh on each side (0 changed files), go1.27.1,
+`sh scripts/release.sh v0.2.0-repro`: the Windows build (Git Bash) and the
+Linux build (WSL Ubuntu 24.04, go1.27.1 linux/amd64 from go.dev) give
+identical SHA256SUMS for all six archives (darwin, linux, windows ×
+amd64, arm64). The steps in the release notes' "Checking a release" work.

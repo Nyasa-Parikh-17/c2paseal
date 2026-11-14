@@ -11,8 +11,22 @@ before v1.0.0 a minor version may change the API.
   lossless and extended (VP8X) files are supported, as are remote manifest
   references in the XMP chunk. WebP fixtures, negative fixtures, fuzz
   targets and interop rows were added; c2patool agrees on every WebP file.
+- **HEIC and AVIF** (`container/bmff`, an ISO BMFF box layer): read, verify
+  and sign. The store is a C2PA `uuid` box straight after `ftyp`; inserting
+  it moves the absolute offsets in `meta/iloc`. The new hard binding
+  `c2pa.hash.bmff.v3` (c2pa-rs's default exclusions, top-level box offsets
+  in the hash) is written when signing, and v1-v3 are verified. Fixtures
+  from the c2pa-rs corpus, negative fixtures, a fuzz target and interop
+  rows; c2patool accepts our HEIC and AVIF files, and we verify c2patool's.
 - `c2paseal verify`/`inspect` on folders, the web app and sealsvc accept
-  WebP.
+  WebP, HEIC and AVIF.
+
+### Fixed
+- `c2paseal verify`/`inspect --recursive` skipped files that Windows lists
+  as cloud placeholders (OneDrive "Files On-Demand" reparse points in a
+  folder that is not one). Such entries are now checked with `os.Stat`.
+- The interop report no longer contains local paths from tools' error
+  messages.
 
 ## v0.4.0 — 2026-11-14
 

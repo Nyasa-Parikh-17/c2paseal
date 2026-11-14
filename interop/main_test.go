@@ -91,3 +91,19 @@ func TestCredentioCauses(t *testing.T) {
 		t.Errorf("c2pa-mcp only: cause %+v", c)
 	}
 }
+
+func TestRedactPath(t *testing.T) {
+	path := `C:\Users\someone\My Project\testdata\broken\truncated-c2pa.avif`
+	for _, tc := range []struct{ in, want string }{
+		{"Validation failed: NOT_FOUND: truncated BMFF box; reading /mnt/c/Users/someone/My Project/testdata/broken/truncated-c2pa.avif; at byte 60",
+			"Validation failed: NOT_FOUND: truncated BMFF box; reading truncated-c2pa.avif; at byte 60"},
+		{`cannot open C:\Users\someone\My Project\testdata\broken\truncated-c2pa.avif`, "cannot open truncated-c2pa.avif"},
+		{"reading /home/runner/work/c2paseal/c2paseal/testdata/broken/truncated-c2pa.avif", "reading truncated-c2pa.avif"},
+		{"Box size extends beyond asset bounds", "Box size extends beyond asset bounds"},
+		{"", ""},
+	} {
+		if got := redactPath(tc.in, path); got != tc.want {
+			t.Errorf("redactPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

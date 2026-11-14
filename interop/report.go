@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/webp"
@@ -98,7 +99,7 @@ func (r *report) markdown() string {
 	w("- `c2paseal/…`: plain; `c2paseal+tsa/…`: with an RFC 3161 time-stamp from a local test TSA;\n")
 	w("- `c2paseal+parent/…`: the `c2paseal/…` file signed again, so it carries two manifests and records the first as its parent ingredient;\n")
 	w("- `c2paseal+sidecar/…`: the manifest store in a `.c2pa` sidecar next to the file;\n")
-	w("- `c2paseal+remote/…`: the store only at the URL in the file's XMP.\n\n")
+	w("- `c2paseal+remote/…`: the store only at the URL in the file's XMP (not for HEIC and AVIF: C2paSeal does not write XMP into ISO BMFF files yet).\n\n")
 	w("Remote stores (these and the c2patool fixtures in `testdata/remote/`) are served by the harness on `http://%s/` while it runs. The trust modes:\n\n", remoteAddr)
 	w("- **default**: the tool's own default trust (C2paSeal and c2patool: no anchors; c2pa-mcp: its embedded C2PA trust list; Credentio: no anchors, and it then skips the signer checks).\n")
 	w("- **trusted**: the TEST ONLY root `testdata/pki/trust-anchors.pem` as signing and time-stamping anchor.\n\n")
@@ -326,6 +327,14 @@ func containerFacts(b []byte) []string {
 		}
 		storeStart, storeEnd = st.Chunk.Offset, st.Chunk.End()
 		add("manifest store: %d bytes in a C2PA chunk at file bytes [%d, %d)", len(st.JUMBF), storeStart, storeEnd)
+	case asset.HEIC, asset.AVIF:
+		st, err := bmff.Extract(b)
+		if err != nil {
+			add("ISO BMFF manifest store: %v", err)
+			return facts
+		}
+		storeStart, storeEnd = st.Box.Offset, st.Box.End()
+		add("manifest store: %d bytes in a C2PA uuid box at file bytes [%d, %d)", len(st.JUMBF), storeStart, storeEnd)
 	default:
 		return facts
 	}

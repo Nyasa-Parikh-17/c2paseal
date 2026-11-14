@@ -1902,3 +1902,107 @@ c2pa-v0.90.21, the version under c2patool 0.27.21):
   GODEBUG=goindex=0 too. In a fresh clone in %TEMP% it works and all four
   go.mod files are tidy. build, list, vet and test are unaffected. So: run
   tidy checks in a clean clone.
+
+### Phase 27 — HEIC/AVIF and the ISO BMFF layer (2026-11-14)
+
+The user asked to complete every phase before video (27, 29, 30, 31),
+stopping at each gate.
+
+**What c2pa-rs does** (read at tag c2pa-v0.90.21: `bmff_io.rs`,
+`assertions/bmff_hash.rs`, `utils/hash_utils.rs`):
+- The C2PA box is a top-level `uuid` box: header, the C2PA UUID
+  d8fec3d6-1b0e-483c-9297-5828877ec481, version and flags, the purpose
+  "manifest\0", an 8-byte Merkle offset (0), then the store. It goes
+  straight after `ftyp` (or replaces the existing one), and the absolute
+  offsets in `iloc`/`stco`/`co64` are adjusted.
+- `c2pa.hash.bmff.v3` default exclusions: `/uuid` with data {offset 8: the
+  UUID}, `/ftyp`, `/mfra`, `/free`, `/skip`. Field order: exclusions, alg,
+  hash, name.
+- Versions 2 and 3 hash, just before each top-level box that is not wholly
+  excluded, that box's offset as 8 big-endian bytes. The range-splitting
+  rules are ported as they are.
+- The box tree descends only into a fixed list of containers (`meta` yes,
+  `iprp`/`ipco` no), reads version and flags for 80 "full box" types,
+  treats size 0 as "to the end of the file", cuts an `mdat` that runs past
+  the end, stops at unreadable trailing bytes, and handles QuickTime's
+  `meta` without version and flags.
+
+**Built**
+- `container/bmff` (standard library plus jumbf):
+  - `Parse` builds the box tree with those rules (depth limit 32);
+    `IsBMFF`, `Brands`.
+  - `Extract`, `Strip`, `Insert` (after ftyp; size64 header past 4 GiB),
+    `WriteStore`, `InsertedSize`. `iloc` versions 0, 1 and 2 are patched
+    for construction method 0 with data_reference_index 0: the base offset
+    when it is non-zero, else the extent offsets. That follows the spec,
+    where c2pa-rs patches both, and reads the extent index with the
+    base-offset size; neither matters for normal files.
+  - `Digest` and `DefaultExclusions`: exclusion matching (length, version,
+    flags exact or bitwise, data, subsets) and the offset markers.
+- `assertion.BMFFHash` (v1, v2, v3 labels) with c2patool's JSON;
+  `asset` detects HEIC (heic, heix, heim, heis, hevc, hevx, mif1, msf1)
+  and AVIF (avif, avis) by their ftyp brands. MP4 is left for Phase 32.
+- Verifier: `assertion.bmffHash.match` / `.mismatch` / `.malformed` with
+  c2patool's exact explanations, c2pa-rs's `verify_self` checks (there are
+  exclusions; subsets are sorted and do not overlap), and offsets only for
+  v2 and v3. Merkle (fragmented files) gives `general.error`, not
+  supported.
+- Signer: the manifest's hard binding is either kind. For BMFF it is
+  `c2pa.hash.bmff.v3` with the default exclusions and a zero hash
+  placeholder (fixed size, so the backfill invariant holds). A
+  `digester` container computes the digest. Sidecar stores work; remote
+  references give a clear error (no XMP writer for BMFF yet).
+- Fixtures (`scripts/make-bmff-fixtures.sh`): `sample.heic` and
+  `sample.avif` from the c2pa-rs corpus at commit 712f03b7 (tag
+  c2pa-v0.90.21), checked by SHA-256 (MIT/Apache-2.0); signed by c2patool
+  (sample.heic, sample.avif, ts.avif; c2patool makes no thumbnail for
+  these); broken data-flip.{avif,heic}, sig-flip, wrong-hash,
+  truncated-c2pa.avif. Oracle output for the new files only; nothing else
+  changed.
+- Wired through the CLI folder walk, the web app (accept, wording), sealsvc
+  (any detected format, `image/heic`/`image/avif`), the negative set, and
+  the interop harness: the remote variant is skipped for BMFF, the
+  container facts have a BMFF case, Credentio's `truncated BMFF box` was
+  added to its broken-container cause, and the tampered-assertion cause
+  covers `c2pa.hash.bmff.v3`.
+- Found on the way:
+  - CLI: `verify --recursive` skipped OneDrive placeholder files (Go lists
+    them as irregular when their folder is not a reparse point). It now
+    asks `os.Stat`. This is also why `go mod tidy` failed here.
+  - Interop: Credentio's error named the file by its WSL path; tool
+    messages now have file paths redacted (TestRedactPath).
+
+**Results**
+- Done-when 1 (TestSignBMFF): HEIC and AVIF signed by C2paSeal, including
+  re-signing c2patool's files, are Valid/Trusted in c2patool. The C2PA box
+  is after ftyp, mdat is untouched, and every iloc extent still points at
+  the same bytes (TestInsertKeepsImageData).
+- Done-when 2: c2patool-signed HEIC and AVIF verify in C2paSeal as in the
+  oracle, tampered ones included (TestCorpus, 20 BMFF cases). Our Digest
+  equals the hash c2patool wrote on every signed fixture, and differs
+  exactly where c2patool reports a mismatch.
+- Interop: 122 files × 2 modes × 4 tools, 0 unexplained, no local paths.
+  Per format, C2paSeal against c2patool, over all rows in both modes:
+  - WebP: 56 same, 10 c2patool refuses (we say Invalid);
+  - HEIC: 12 same, 2 refused;
+  - AVIF: 18 same, 4 refused.
+  No row differs otherwise.
+- FuzzParse: no crashers. A tiny synthetic HEIF seed took it from about
+  1.2k to 24k execs per 30 s.
+- gofmt, vet and staticcheck are clean (host and js/wasm) and all suites
+  pass in all four modules. Coverage: bmff 83.9%, sign 80.3%, verify
+  89.7%. The wasm build is 3.81 MB gzipped (91%).
+
+**Not done here (needs the user)**
+- Push; CI green. Gate G: per-format interop report, then ask before
+  v0.5.0. Release checklist: set the extra modules' require lines to
+  v0.5.0 and tag `keys/*/v0.5.0` and `cmd/sealsvc/v0.5.0` too. The
+  `keys/*/v0.4.0` tags at c3aa8d5 are still to be pushed.
+
+**Open issues / Future work**
+- XMP in BMFF (the XMP uuid box), so HEIC/AVIF can carry remote manifest
+  references.
+- BMFF update manifests ("original"/"update" purposes) and Merkle hashes
+  for fragmented files (Phase 32 needs the latter for video).
+- `stco`/`co64` offset fix-ups for MP4 (Phase 32).
+- wasm headroom is 9%.

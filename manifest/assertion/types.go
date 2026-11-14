@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
+	"github.com/fxamacker/cbor/v2"
 )
 
 // Actions is a c2pa.actions (v1) or c2pa.actions.v2 assertion. Fields not
@@ -40,6 +41,42 @@ type DataHash struct {
 	Pad        []byte      `cbor:"pad" json:"pad"`
 	Pad2       []byte      `cbor:"pad2,omitempty" json:"pad2,omitempty"`
 	URL        string      `cbor:"url,omitempty" json:"url,omitempty"`
+}
+
+// BMFFHash is a c2pa.hash.bmff hard-binding assertion (ISO BMFF files such
+// as HEIC and AVIF). Field names and JSON follow c2pa-rs.
+type BMFFHash struct {
+	Exclusions []BMFFExclusion `cbor:"exclusions" json:"exclusions"`
+	Alg        string          `cbor:"alg,omitempty" json:"alg,omitempty"` // empty: inherit the claim's alg
+	Hash       []byte          `cbor:"hash,omitempty" json:"hash,omitempty"`
+	// Merkle holds the per-chunk hashes of fragmented files, kept as CBOR;
+	// verifying them is not supported.
+	Merkle cbor.RawMessage `cbor:"merkle,omitempty" json:"-"`
+	Name   string          `cbor:"name,omitempty" json:"name,omitempty"`
+	URL    string          `cbor:"url,omitempty" json:"url,omitempty"` // deprecated remote hash
+}
+
+// BMFFExclusion selects boxes left out of a c2pa.hash.bmff hash.
+type BMFFExclusion struct {
+	XPath   string       `cbor:"xpath" json:"xpath"`
+	Length  *uint64      `cbor:"length,omitempty" json:"length,omitempty"`
+	Data    []BMFFData   `cbor:"data,omitempty" json:"data,omitempty"`
+	Subset  []BMFFSubset `cbor:"subset,omitempty" json:"subset,omitempty"`
+	Version *uint8       `cbor:"version,omitempty" json:"version,omitempty"`
+	Flags   []byte       `cbor:"flags,omitempty" json:"flags,omitempty"`
+	Exact   *bool        `cbor:"exact,omitempty" json:"exact,omitempty"`
+}
+
+// BMFFData requires Value at Offset from the start of the box.
+type BMFFData struct {
+	Offset uint64 `cbor:"offset" json:"offset"`
+	Value  []byte `cbor:"value" json:"value"`
+}
+
+// BMFFSubset is a range inside a box; Length 0 means to its end.
+type BMFFSubset struct {
+	Offset uint64 `cbor:"offset" json:"offset"`
+	Length uint64 `cbor:"length" json:"length"`
 }
 
 // Exclusion is a byte range left out of the hard-binding hash.

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -112,7 +113,9 @@ func run(out, work, require string, strict bool) error {
 		row := row{Item: it, Facts: append(containerFacts(b), externalFacts(it.Path, b)...)}
 		for _, mode := range modes {
 			for _, t := range tools {
-				row.Results = append(row.Results, result{Tool: t.info().Name, Mode: mode, Outcome: t.run(it.Path, mode)})
+				o := t.run(it.Path, mode)
+				o.Err = redactPath(o.Err, it.Path)
+				row.Results = append(row.Results, result{Tool: t.info().Name, Mode: mode, Outcome: o})
 			}
 		}
 		rep.Rows = append(rep.Rows, row)
@@ -218,6 +221,11 @@ func signCorpus(td, work string, corpus []item, remote *remoteServer) ([]item, e
 		ext := filepath.Ext(base)
 		var plain []byte
 		for _, v := range []string{"c2paseal", "c2paseal+tsa", "c2paseal+parent", "c2paseal+sidecar", "c2paseal+remote"} {
+			// A remote reference lives in the file's XMP, which C2paSeal
+			// does not write into ISO BMFF files (HEIC, AVIF) yet.
+			if v == "c2paseal+remote" && asset.IsBMFF(asset.Detect(in)) {
+				continue
+			}
 			// The format is part of the name: small.jpg and small.png would
 			// otherwise share one sidecar path (<stem>.c2pa).
 			name := strings.TrimSuffix(base, ext) + "-" + strings.TrimPrefix(ext, ".") + "." + strings.ReplaceAll(v, "+", "-")
@@ -256,4 +264,17 @@ func signCorpus(td, work string, corpus []item, remote *remoteServer) ([]item, e
 		}
 	}
 	return out, nil
+}
+
+// redactPath replaces an absolute path to the file in a tool's message
+// (Credentio names the file it read, as a Windows, WSL or CI path) with the
+// file name alone, so the report holds no local paths and does not depend
+// on where it was generated.
+func redactPath(msg, path string) string {
+	if msg == "" {
+		return msg
+	}
+	base := filepath.Base(path)
+	re := regexp.MustCompile(`(?:[A-Za-z]:)?(?:[\\/][^\\/;"]+)*[\\/]` + regexp.QuoteMeta(base))
+	return re.ReplaceAllString(msg, base)
 }

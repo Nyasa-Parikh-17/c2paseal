@@ -17,6 +17,9 @@ const (
 	LabelActions        = "c2pa.actions"
 	LabelActionsV2      = "c2pa.actions.v2"
 	LabelDataHash       = "c2pa.hash.data"
+	LabelBMFFHash       = "c2pa.hash.bmff" // version 1; also .v2 and .v3
+	LabelBMFFHashV2     = "c2pa.hash.bmff.v2"
+	LabelBMFFHashV3     = "c2pa.hash.bmff.v3"
 	LabelCreativeWork   = "stds.schema-org.CreativeWork"
 	LabelThumbnailClaim = "c2pa.thumbnail.claim" // optionally followed by ".jpeg", ".png", …
 	LabelThumbnailIngr  = "c2pa.thumbnail.ingredient"
@@ -31,7 +34,7 @@ type Assertion struct {
 	Box   *jumbf.Box // the assertion superbox, with its original bytes
 
 	// Value is the decoded content for in-scope labels: *Actions, *DataHash,
-	// CreativeWork or *Thumbnail. It is nil for other labels, whose content
+	// *BMFFHash, CreativeWork or *Thumbnail. It is nil for other labels, whose content
 	// stays available through Box.
 	Value any
 	// Err is set when an in-scope assertion could not be decoded.
@@ -63,6 +66,11 @@ func Decode(box *jumbf.Box) Assertion {
 		if err = decodeCBOR(box, &v); err == nil {
 			a.Value = &v
 		}
+	case IsBMFFHash(base):
+		var v BMFFHash
+		if err = decodeCBOR(box, &v); err == nil {
+			a.Value = &v
+		}
 	case base == LabelCreativeWork:
 		var v CreativeWork
 		if err = decodeJSONOrCBOR(box, &v); err == nil {
@@ -78,6 +86,23 @@ func Decode(box *jumbf.Box) Assertion {
 		a.Err = fmt.Errorf("assertion %q: %w: %w", a.Label, ErrMalformed, err)
 	}
 	return a
+}
+
+// IsBMFFHash reports whether a base label is a c2pa.hash.bmff assertion of
+// any version.
+func IsBMFFHash(base string) bool {
+	return base == LabelBMFFHash || base == LabelBMFFHashV2 || base == LabelBMFFHashV3
+}
+
+// BMFFHashVersion returns the version of a c2pa.hash.bmff label: 1, 2 or 3.
+func BMFFHashVersion(base string) int {
+	switch base {
+	case LabelBMFFHashV2:
+		return 2
+	case LabelBMFFHashV3:
+		return 3
+	}
+	return 1
 }
 
 func isThumbnail(base string) bool {

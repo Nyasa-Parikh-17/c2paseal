@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/assertion"
 )
@@ -32,8 +33,12 @@ func hardBinding(m *manifest.Manifest, file []byte) []Status {
 
 	for _, a := range bindings {
 		url := assertionURL(m.Label, a.Label)
+		if base := assertion.BaseLabel(a.Label); assertion.IsBMFFHash(base) {
+			out = append(out, bmffBinding(m, a, url, assertion.BMFFHashVersion(base), file))
+			continue
+		}
 		if assertion.BaseLabel(a.Label) != assertion.LabelDataHash {
-			// BMFF, boxes and collection hashes are out of scope.
+			// Boxes and collection hashes are out of scope.
 			out = append(out, Status{Code: GeneralError, URL: url, Explanation: "unsupported hard binding: " + a.Label})
 			continue
 		}
@@ -91,4 +96,74 @@ func checkDataHash(file []byte, alg string, dh *assertion.DataHash) error {
 		return errHashMismatch
 	}
 	return nil
+}
+
+// bmffBinding checks a c2pa.hash.bmff assertion against the file
+// (c2pa-rs BmffHash::verify_stream_hash for a flat, non-fragmented file).
+// Versions 2 and 3 hash each top-level box's offset as well.
+func bmffBinding(m *manifest.Manifest, a assertion.Assertion, url string, version int, file []byte) Status {
+	bh, ok := a.Value.(*assertion.BMFFHash)
+	if !ok || !bmffWellFormed(bh) {
+		return Status{Code: AssertionBMFFHashMalformed, URL: url, Explanation: "BMFF hash could not be parsed"}
+	}
+	name := cmp.Or(bh.Name, "unnamed")
+	fail := func(why string) Status {
+		return Status{Code: AssertionBMFFHashMismatch, URL: url, Explanation: fmt.Sprintf("asset hash error, name: %s, error: %s", name, why)}
+	}
+	switch {
+	case bh.URL != "":
+		return fail("BMFF hash remote has been deprecated")
+	case len(bh.Merkle) > 0:
+		return Status{Code: GeneralError, URL: url, Explanation: "BMFF Merkle hashes (fragmented files) are not supported"}
+	case bh.Hash == nil:
+		return fail("no file hash")
+	}
+	h, err := manifest.NewHash(cmp.Or(bh.Alg, m.Claim.Alg, manifest.DefaultAlg))
+	if err != nil {
+		return fail(err.Error())
+	}
+	got, err := bmff.Digest(h, file, bmffExclusions(bh.Exclusions), version > 1)
+	if err != nil {
+		return fail(err.Error())
+	}
+	if !bytes.Equal(got, bh.Hash) {
+		return fail(AssertionBMFFHashMismatch)
+	}
+	return Status{Code: AssertionBMFFHashMatch, URL: url, Explanation: "BMFF hash valid"}
+}
+
+// bmffWellFormed is c2pa-rs's verify_self: there are exclusions, and every
+// exclusion's subsets are sorted by offset and do not overlap.
+func bmffWellFormed(bh *assertion.BMFFHash) bool {
+	if len(bh.Exclusions) == 0 {
+		return false
+	}
+	for _, e := range bh.Exclusions {
+		for i := 1; i < len(e.Subset); i++ {
+			prev := e.Subset[i-1]
+			end := prev.Offset + prev.Length
+			if e.Subset[i].Offset < prev.Offset || end < prev.Offset || end > e.Subset[i].Offset {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func bmffExclusions(in []assertion.BMFFExclusion) []bmff.Exclusion {
+	out := make([]bmff.Exclusion, 0, len(in))
+	for _, e := range in {
+		x := bmff.Exclusion{XPath: e.XPath, Length: e.Length, Version: e.Version, Flags: e.Flags, Exact: e.Exact}
+		for _, d := range e.Data {
+			x.Data = append(x.Data, bmff.DataMatch{Offset: d.Offset, Value: d.Value})
+		}
+		if e.Subset != nil {
+			x.Subset = []bmff.Subset{}
+			for _, s := range e.Subset {
+				x.Subset = append(x.Subset, bmff.Subset{Offset: s.Offset, Length: s.Length})
+			}
+		}
+		out = append(out, x)
+	}
+	return out
 }

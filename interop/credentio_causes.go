@@ -84,13 +84,13 @@ var credentioCauses = []struct {
 	{
 		// Broken containers: no oracle status.
 		match: func(r *row, m mode, seal, cr outcome, f fileFacts) bool {
-			return (failSet(seal, verify.GeneralError) && (strings.Contains(cr.Err, "truncated JPEG box") || strings.Contains(cr.Err, "PNG chunk extends beyond the end") || strings.Contains(cr.Err, "RIFF chunk extends beyond the end"))) ||
+			return (failSet(seal, verify.GeneralError) && (strings.Contains(cr.Err, "truncated JPEG box") || strings.Contains(cr.Err, "PNG chunk extends beyond the end") || strings.Contains(cr.Err, "RIFF chunk extends beyond the end") || strings.Contains(cr.Err, "truncated BMFF box"))) ||
 				(failSet(seal, verify.ClaimMalformed) && strings.Contains(cr.Err, "could not parse content box"))
 		},
 		cause: cause{"no oracle: Credentio reports an error instead of a status",
 			"The container or the JUMBF structure is broken by `scripts/mkbroken` (a segment or chunk cut off by the end of the file, or a box length past the end of the store; " +
 				"container facts give the numbers). c2patool also exits with an error here, so there is no oracle status. " +
-				"Credentio exits with a parse error (`truncated JPEG box`, `PNG chunk extends beyond the end of the file`, `RIFF chunk extends beyond the end of the file`, `could not parse content box`); " +
+				"Credentio exits with a parse error (`truncated JPEG box`, `PNG chunk extends beyond the end of the file`, `RIFF chunk extends beyond the end of the file`, `truncated BMFF box`, `could not parse content box`); " +
 				"C2paSeal reports `general.error` or `claim.malformed`. Every tool rejects the file."},
 	},
 	{
@@ -101,14 +101,14 @@ var credentioCauses = []struct {
 				return false
 			}
 			want := []string{verify.AssertionHashedURIMismatch, "assertion.undeclared"}
-			if slices.Contains(seal.Failure, verify.AssertionDataHashMismatch) {
+			if slices.Contains(seal.Failure, verify.AssertionDataHashMismatch) || slices.Contains(seal.Failure, verify.AssertionBMFFHashMismatch) {
 				want = append(want, "claim.hardBindings.missing")
 			}
 			return sameSet(cr.Failure, want)
 		},
 		cause: cause{"Credentio: treats an assertion whose hash does not match as undeclared",
 			"`scripts/mkbroken` changed one byte inside an assertion (container facts: its hash no longer matches its hashed URI in the claim): " +
-				"the action name in `c2pa.actions.v2` (`assertion-flip.jpg`), or the recorded hash in `c2pa.hash.data` (`wrong-hash.*`). " +
+				"the action name in `c2pa.actions.v2` (`assertion-flip.jpg`), or the recorded hash in `c2pa.hash.data` or `c2pa.hash.bmff.v3` (`wrong-hash.*`). " +
 				"All tools report `assertion.hashedURI.mismatch`. c2patool and C2paSeal still read the assertion and report what is wrong with it " +
 				"(`assertion.action.malformed`, or `assertion.dataHash.mismatch` from comparing the recorded hash with the image). " +
 				"Credentio drops the assertion as `assertion.undeclared`; without `c2pa.hash.data` the claim has no hard binding, so it reports `claim.hardBindings.missing`. " +

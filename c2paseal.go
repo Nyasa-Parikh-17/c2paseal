@@ -16,6 +16,8 @@ const (
 	FormatJPEG = asset.JPEG
 	FormatPNG  = asset.PNG
 	FormatWebP = asset.WEBP
+	FormatHEIC = asset.HEIC
+	FormatAVIF = asset.AVIF
 )
 
 // ErrUnsupportedFormat is returned for files that are not JPEG, PNG or WebP.
@@ -96,6 +98,6 @@ func ReadBytes(b []byte) (*ManifestStore, error) {
 	return &ManifestStore{Format: format, Root: root, Manifests: ms, Active: ms[len(ms)-1]}, nil
 }
 
-// DetectFormat returns FormatJPEG, FormatPNG or FormatWebP from a file's
-// leading bytes, or "" if it is none of them.
+// DetectFormat returns FormatJPEG, FormatPNG, FormatWebP, FormatHEIC or
+// FormatAVIF from a file's leading bytes, or "" if it is none of them.
 func DetectFormat(b []byte) string { return asset.Detect(b) }

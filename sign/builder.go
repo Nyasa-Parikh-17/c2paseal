@@ -60,6 +60,7 @@ type Manifest struct {
 	layout   hashDataLayout
 
 	external  bool        // store kept outside the file: hash.data has no exclusion
+	bmff      bool        // ISO BMFF file: the hard binding is c2pa.hash.bmff.v3
 	protected []byte      // serialised COSE protected header
 	sigLen    int         // placeholder signature length (esSignatureLen)
 	tstSize   int         // reserved unprotected header size; 0 = no time-stamp
@@ -71,6 +72,7 @@ type Manifest struct {
 // buildConfig exists so tests can build a deliberately wrong placeholder.
 type buildConfig struct {
 	sigLen int
+	bmff   bool // hard binding c2pa.hash.bmff.v3 instead of c2pa.hash.data
 }
 
 // Build builds an unsigned manifest store: assertions (actions, optional
@@ -99,7 +101,7 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &Manifest{Label: "urn:c2pa:" + id, opts: opts, sigLen: cfg.sigLen, digest: make([]byte, digestLen), external: opts.Sidecar}
+	m := &Manifest{Label: "urn:c2pa:" + id, opts: opts, sigLen: cfg.sigLen, digest: make([]byte, digestLen), external: opts.Sidecar, bmff: cfg.bmff}
 
 	// Assertions: the parent ingredient first, since c2pa.opened refers to it.
 	var created []*jumbf.Box
@@ -137,7 +139,11 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 	hd, layout := m.encodeHashData(0, 0, nil)
 	m.layout = layout
 	m.hashData = &jumbf.Box{Type: "cbor", Payload: hd}
-	if m.hashSup, err = assertionBox(r, labelHashData, uuidCBOR, m.hashData); err != nil {
+	bindingLabel := labelHashData
+	if m.bmff {
+		bindingLabel = assertion.LabelBMFFHashV3
+	}
+	if m.hashSup, err = assertionBox(r, bindingLabel, uuidCBOR, m.hashData); err != nil {
 		return nil, err
 	}
 	created = append(created, actionsSup, m.hashSup)
@@ -242,6 +248,9 @@ func (m *Manifest) replacePayload(box *jumbf.Box, payload []byte) (patch, error)
 
 // SetExclusion fills in the hard-binding exclusion (step 4).
 func (m *Manifest) SetExclusion(start, length uint64) (patch, error) {
+	if m.bmff {
+		return patch{}, errors.New("sign: c2pa.hash.bmff exclusions name boxes; there is no range to set")
+	}
 	if m.external {
 		return patch{}, errors.New("sign: a manifest kept outside the file has no exclusion")
 	}
@@ -277,7 +286,7 @@ func (m *Manifest) Seal() ([]patch, error) {
 		}
 	}
 	if !found {
-		return nil, errors.New("sign: claim does not reference c2pa.hash.data")
+		return nil, errors.New("sign: claim does not reference the hard-binding assertion")
 	}
 	claimCBOR, err := m.Claim.Encode()
 	if err != nil {

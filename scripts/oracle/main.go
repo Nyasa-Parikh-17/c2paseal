@@ -78,7 +78,7 @@ func run(root string) error {
 
 func isImage(f string) bool {
 	switch strings.ToLower(filepath.Ext(f)) {
-	case ".jpg", ".jpeg", ".png", ".webp":
+	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".avif":
 		return true
 	}
 	return false

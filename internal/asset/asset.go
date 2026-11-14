@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
@@ -19,6 +20,8 @@ const (
 	JPEG = "jpeg"
 	PNG  = "png"
 	WEBP = "webp"
+	HEIC = "heic"
+	AVIF = "avif"
 )
 
 // Errors. Container parse errors are returned wrapped as they are.
@@ -37,9 +40,38 @@ func Detect(b []byte) string {
 		return PNG
 	case webp.IsWebP(b):
 		return WEBP
+	case bmff.IsBMFF(b):
+		return bmffFormat(b)
 	}
 	return ""
 }
+
+// bmffFormat names an ISO BMFF image by its ftyp brands: AVIF, or HEIC for
+// the HEIF/HEVC brands. Other BMFF files (such as MP4) are not supported.
+func bmffFormat(b []byte) string {
+	major, compat := bmff.Brands(b)
+	brands := append([]string{major}, compat...)
+	for _, br := range brands {
+		if br == "avif" || br == "avis" {
+			return AVIF
+		}
+	}
+	for _, br := range brands {
+		switch br {
+		case "heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1":
+			return HEIC
+		}
+	}
+	return ""
+}
+
+// IsBMFF reports whether format is an ISO BMFF one (hard binding
+// c2pa.hash.bmff instead of c2pa.hash.data).
+func IsBMFF(format string) bool { return format == HEIC || format == AVIF }
+
+// ErrNoXMP is returned when asked to write XMP into a format where that is
+// not supported yet.
+var ErrNoXMP = errors.New("writing XMP is not supported for this format")
 
 // Extract returns the parsed manifest store of a JPEG or PNG. A file
 // without one gives ErrNoManifest; more than one gives ErrMultipleStores.
@@ -62,6 +94,12 @@ func Extract(b []byte) (format string, root *jumbf.Box, err error) {
 		st, err := webp.Extract(b)
 		if err != nil {
 			return format, nil, normalize(err, webp.ErrNoManifest, webp.ErrMultipleStores)
+		}
+		return format, st.Root, nil
+	case HEIC, AVIF:
+		st, err := bmff.Extract(b)
+		if err != nil {
+			return format, nil, normalize(err, bmff.ErrNoManifest, bmff.ErrMultipleStores)
 		}
 		return format, st.Root, nil
 	}
@@ -90,6 +128,8 @@ func XMP(b []byte) (packet []byte, ok bool, err error) {
 		return png.XMP(b)
 	case WEBP:
 		return webp.XMP(b)
+	case HEIC, AVIF:
+		return nil, false, nil // XMP in a BMFF uuid box is not read yet
 	}
 	return nil, false, ErrUnsupportedFormat
 }
@@ -104,6 +144,8 @@ func SetXMP(b, packet []byte) ([]byte, error) {
 		return png.SetXMP(b, packet)
 	case WEBP:
 		return webp.SetXMP(b, packet)
+	case HEIC, AVIF:
+		return nil, fmt.Errorf("%w: %s", ErrNoXMP, Detect(b))
 	}
 	return nil, ErrUnsupportedFormat
 }

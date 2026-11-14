@@ -38,6 +38,11 @@ var variants = []variant{
 	{"sig-flip.webp", "small.webp", flipSignature},
 	{"wrong-hash.webp", "small.webp", wrongHash},
 	{"truncated-c2pa.webp", "small.webp", truncateWebPC2PA},
+	{"data-flip.avif", "sample.avif", flipBMFFData},
+	{"data-flip.heic", "sample.heic", flipBMFFData},
+	{"sig-flip.avif", "sample.avif", flipSignature},
+	{"wrong-hash.avif", "sample.avif", wrongBMFFHash},
+	{"truncated-c2pa.avif", "sample.avif", truncateBMFFC2PA},
 }
 
 func main() {
@@ -191,8 +196,13 @@ func flipPNGData(b []byte) ([]byte, error) {
 // c2pa.hash.data assertion. The image is untouched, so the recorded hash no
 // longer matches it (and the assertion's hashed URI no longer matches the
 // claim, since the assertion bytes changed).
-func wrongHash(b []byte) ([]byte, error) {
-	off, n, err := contentBoxAfterLabel(b, "c2pa.hash.data")
+func wrongHash(b []byte) ([]byte, error) { return wrongHashIn(b, "c2pa.hash.data") }
+
+// wrongBMFFHash is wrongHash for the c2pa.hash.bmff.v3 assertion.
+func wrongBMFFHash(b []byte) ([]byte, error) { return wrongHashIn(b, "c2pa.hash.bmff.v3") }
+
+func wrongHashIn(b []byte, label string) ([]byte, error) {
+	off, n, err := contentBoxAfterLabel(b, label)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +210,7 @@ func wrongHash(b []byte) ([]byte, error) {
 	key := []byte("\x64hash\x58\x20")
 	i := bytes.Index(b[off:off+n], key)
 	if i < 0 {
-		return nil, errors.New("hash field not found in c2pa.hash.data")
+		return nil, fmt.Errorf("hash field not found in %s", label)
 	}
 	b[off+i+len(key)] ^= 0x01
 	return b, nil
@@ -270,4 +280,40 @@ func truncateWebPC2PA(b []byte) ([]byte, error) {
 		return nil, err
 	}
 	return b[:off+8+n/2], nil
+}
+
+// bmffTopBox returns the offset and size of the first top-level ISO BMFF box
+// of the type (32-bit sizes only, which the fixtures use).
+func bmffTopBox(b []byte, typ string) (off, n int, err error) {
+	for i := 0; i+8 <= len(b); {
+		n := int(binary.BigEndian.Uint32(b[i:]))
+		if n < 8 {
+			break
+		}
+		if string(b[i+4:i+8]) == typ {
+			return i, n, nil
+		}
+		i += n
+	}
+	return 0, 0, fmt.Errorf("no top-level %q box", typ)
+}
+
+// flipBMFFData flips one bit in the middle of the mdat box (the image
+// data). ISO BMFF has no checksums, so only the hard binding is broken.
+func flipBMFFData(b []byte) ([]byte, error) {
+	off, n, err := bmffTopBox(b, "mdat")
+	if err != nil {
+		return nil, err
+	}
+	b[off+n/2] ^= 0x01
+	return b, nil
+}
+
+// truncateBMFFC2PA cuts the file in the middle of the C2PA uuid box.
+func truncateBMFFC2PA(b []byte) ([]byte, error) {
+	off, n, err := bmffTopBox(b, "uuid")
+	if err != nil {
+		return nil, err
+	}
+	return b[:off+n/2], nil
 }

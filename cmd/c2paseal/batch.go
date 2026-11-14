@@ -49,7 +49,7 @@ func batchMode(paths []string) bool {
 // isImage reports whether a file name has an extension c2paseal reads.
 func isImage(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".webp":
+	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif":
 		return true
 	}
 	return false
@@ -89,7 +89,7 @@ func expand(paths []string, recursive bool) []entry {
 				}
 				return nil
 			}
-			if d.Type().IsRegular() && isImage(d.Name()) {
+			if isImage(d.Name()) && isRegular(path, d) {
 				files = append(files, path)
 			}
 			return nil
@@ -103,6 +103,21 @@ func expand(paths []string, recursive bool) []entry {
 		}
 	}
 	return out
+}
+
+// isRegular reports whether a directory entry is a regular file. Some
+// entries are listed as irregular although they are files: on Windows,
+// OneDrive's cloud placeholders (reparse points) in a folder that is not
+// itself one. For those, os.Stat, which resolves the placeholder, decides.
+func isRegular(path string, d fs.DirEntry) bool {
+	if d.Type().IsRegular() {
+		return true
+	}
+	if d.Type()&fs.ModeIrregular == 0 {
+		return false // a directory, symlink, device…
+	}
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // jsonLine writes v as one line of JSON.

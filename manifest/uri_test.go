@@ -12,7 +12,7 @@ import (
 
 // TestHashChecks: every assertion reference matches in every fixture except
 // assertion-flip.jpg, where exactly the actions assertion mismatches, and
-// wrong-hash.*, where exactly the data hash assertion mismatches.
+// wrong-hash.*, where exactly the hard-binding assertion mismatches.
 func TestHashChecks(t *testing.T) {
 	all, err := fixtures.List()
 	if err != nil {
@@ -51,7 +51,7 @@ func TestHashChecks(t *testing.T) {
 					t.Errorf("%s: %s: %v", f, c.Ref.URL, c.Err)
 				}
 				wantMatch := !(f.Name == "assertion-flip.jpg" && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.actions.v2") &&
-					!(strings.HasPrefix(f.Name, "wrong-hash.") && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.hash.data")
+					!(strings.HasPrefix(f.Name, "wrong-hash.") && (c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.hash.data" || c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.hash.bmff.v3"))
 				if legacy {
 					continue // statuses are checked against the oracle in verify
 				}

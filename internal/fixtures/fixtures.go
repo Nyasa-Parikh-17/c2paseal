@@ -41,7 +41,7 @@ var Kinds = []Kind{Unsigned, Signed, Broken, Sample, Remote, Legacy, OCSP}
 type Fixture struct {
 	Name   string // file name, e.g. "small.jpg"
 	Kind   Kind
-	Format string // "jpeg", "png" or "webp"
+	Format string // "jpeg", "png", "webp", "heic" or "avif"
 	Path   string
 
 	// ExpectedPath holds c2patool --detailed output with default trust
@@ -267,6 +267,10 @@ func formatOf(name string) string {
 		return "png"
 	case ".webp":
 		return "webp"
+	case ".heic":
+		return "heic"
+	case ".avif":
+		return "avif"
 	}
 	return ""
 }

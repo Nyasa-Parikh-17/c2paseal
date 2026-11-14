@@ -1,7 +1,8 @@
 # C2paSeal
 
 A pure-Go **signer and verifier** for [C2PA](https://c2pa.org) Content
-Credentials in **JPEG**, **PNG** and **WebP** files. It builds with `CGO_ENABLED=0`.
+Credentials in **JPEG**, **PNG**, **WebP**, **HEIC** and **AVIF** files. It builds with
+`CGO_ENABLED=0`.
 
 ## What it does
 
@@ -18,7 +19,7 @@ It is not the only pure-Go C2PA code: for example
 [`richardwooding/c2pa`](https://pkg.go.dev/github.com/richardwooding/c2pa)
 (used through its `c2pa-mcp` CLI in [INTEROP.md](INTEROP.md)) also validates
 and documents a signing command. C2paSeal's focus is a small, auditable
-signer for JPEG, PNG and WebP:
+signer for JPEG, PNG, WebP, HEIC and AVIF:
 - **Few dependencies:** three, plus the standard library.
 - **Byte-exact writes:** reserve-and-backfill, with the placeholder-length
   invariant checked in production code.
@@ -166,11 +167,11 @@ that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
 
 | Area | Supported |
 |---|---|
-| Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`), WebP (RIFF `C2PA` chunk) |
+| Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`), WebP (RIFF `C2PA` chunk), HEIC and AVIF (ISO BMFF C2PA `uuid` box) |
 | Operations | Read, verify, sign |
 | Signature | Signing: ES256 (ECDSA P-256, SHA-256). Verifying: also ES384, ES512, PS256, PS384, PS512 and Ed25519 |
 | Claims | Writes claim v2; reads claim v2 and C2PA 1.x claim v1 (`c2pa.claim`) |
-| Hard binding | `c2pa.hash.data` |
+| Hard binding | `c2pa.hash.data`; `c2pa.hash.bmff.v3` for HEIC and AVIF (v2 and v1 are verified too) |
 | Assertions written | `c2pa.actions.v2` (`c2pa.created`, or `c2pa.opened` when re-signing, plus later actions), `c2pa.hash.data`, `c2pa.ingredient.v3` for the parent when re-signing, optional `c2pa.thumbnail.claim` |
 | Edit history | Re-signing keeps the earlier manifests byte for byte and records the previous one as the parent ingredient |
 | Manifest location | Embedded, in a `.c2pa` sidecar (`--sidecar`), or at a remote URL referenced from XMP (`--remote`); `verify` finds sidecars itself and fetches remote stores only with `--fetch-remote` |
@@ -185,10 +186,14 @@ that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
   whose private keys are public. Files signed with it prove nothing and show
   `signingCredential.untrusted` unless you pass its root as a trust anchor.
   For real use you need a certificate from a CA on the C2PA trust list.
-- **JPEG, PNG and WebP only.** No video, BMFF or other formats.
+- **JPEG, PNG, WebP, HEIC and AVIF only.** No video or other formats yet.
+- HEIC and AVIF: no remote manifest references (C2paSeal does not write
+  XMP into ISO BMFF files yet), no update manifests, and fragmented files'
+  Merkle hashes are not verified.
 - **Signing is ES256 only.** Verifying also accepts ES384, ES512, PS256,
   PS384, PS512 and Ed25519.
-- **One hard binding:** `c2pa.hash.data`. No soft bindings or watermarks.
+- **Hard bindings:** `c2pa.hash.data` and `c2pa.hash.bmff`. No soft
+  bindings or watermarks.
 - Revocation is OCSP for the signer only: no CRLs, and no checks of
   time-stamp authorities or intermediates.
 - C2PA 1.x files are read and verified, not written. Stores written before

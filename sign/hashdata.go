@@ -2,6 +2,8 @@ package sign
 
 import (
 	"encoding/binary"
+
+	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 )
 
 // hashDataLayout records where the values that are backfilled sit inside the
@@ -58,10 +60,66 @@ func encodeHashData(start, length uint64, hash []byte) ([]byte, hashDataLayout) 
 	return b, l
 }
 
+// encodeBMFFHash encodes a c2pa.hash.bmff.v3 assertion with c2pa-rs's
+// default exclusions (the C2PA uuid box, ftyp, mfra, free, skip):
+//
+//	{"exclusions": [{"xpath": "/uuid", "data": [{"offset": 8, "value": bstr(16)}]},
+//	  {"xpath": "/ftyp"}, {"xpath": "/mfra"}, {"xpath": "/free"}, {"xpath": "/skip"}],
+//	 "alg": "sha256", "hash": bstr(32), "name": "jumbf manifest"}
+//
+// Field order follows c2pa-rs. Only the hash is backfilled; the exclusions
+// name boxes, not offsets, so they are final from the start.
+func encodeBMFFHash(hash []byte) ([]byte, hashDataLayout) {
+	var b []byte
+	text := func(s string) {
+		b = appendHead(b, 3, uint64(len(s)))
+		b = append(b, s...)
+	}
+	b = appendHead(b, 5, 4)
+	text("exclusions")
+	ex := bmff.DefaultExclusions()
+	b = appendHead(b, 4, uint64(len(ex)))
+	for _, e := range ex {
+		pairs := uint64(1)
+		if len(e.Data) > 0 {
+			pairs++
+		}
+		b = appendHead(b, 5, pairs)
+		text("xpath")
+		text(e.XPath)
+		if len(e.Data) > 0 {
+			text("data")
+			b = appendHead(b, 4, uint64(len(e.Data)))
+			for _, d := range e.Data {
+				b = appendHead(b, 5, 2)
+				text("offset")
+				b = appendHead(b, 0, d.Offset)
+				text("value")
+				b = appendHead(b, 2, uint64(len(d.Value)))
+				b = append(b, d.Value...)
+			}
+		}
+	}
+	text("alg")
+	text("sha256")
+	text("hash")
+	b = appendHead(b, 2, digestLen)
+	l := hashDataLayout{start: -1, length: -1, hash: len(b)}
+	h := make([]byte, digestLen)
+	copy(h, hash)
+	b = append(b, h...)
+	text("name")
+	text("jumbf manifest")
+	return b, l
+}
+
 // encodeHashData encodes the manifest's c2pa.hash.data: with one exclusion
 // for an embedded store, or with none for a store kept outside the file
 // (a sidecar or remote store), where the hash covers the whole file.
 func (m *Manifest) encodeHashData(start, length uint64, hash []byte) ([]byte, hashDataLayout) {
+	if m.bmff {
+		return encodeBMFFHash(hash)
+	}
 	if m.external {
 		return encodeHashDataExternal(hash)
 	}

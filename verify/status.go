@@ -31,6 +31,7 @@ const (
 	TimeStampTrusted             = "timeStamp.trusted"
 	AssertionHashedURIMatch      = "assertion.hashedURI.match"
 	AssertionDataHashMatch       = "assertion.dataHash.match"
+	AssertionBMFFHashMatch       = "assertion.bmffHash.match"
 	IngredientManifestValidated  = "ingredient.manifest.validated"
 
 	// Informational.
@@ -68,6 +69,8 @@ const (
 	AssertionActionMalformed          = "assertion.action.malformed"
 	AssertionDataHashMismatch         = "assertion.dataHash.mismatch"
 	AssertionDataHashMalformed        = "assertion.dataHash.malformed"
+	AssertionBMFFHashMismatch         = "assertion.bmffHash.mismatch"
+	AssertionBMFFHashMalformed        = "assertion.bmffHash.malformed"
 	AlgorithmUnsupported              = "algorithm.unsupported"
 	ManifestMissing                   = "manifest.missing"
 	ManifestInaccessible              = "manifest.inaccessible"
@@ -85,7 +88,7 @@ func KindOf(code string) Kind {
 	switch code {
 	case ClaimSignatureValidated, ClaimSignatureInsideValidity, SigningCredentialTrusted,
 		TimeStampValidated, TimeStampTrusted, AssertionHashedURIMatch, AssertionDataHashMatch,
-		"signingCredential.ocsp.notRevoked", "assertion.bmffHash.match", "assertion.accessible",
+		"signingCredential.ocsp.notRevoked", AssertionBMFFHashMatch, "assertion.accessible",
 		"assertion.boxesHash.match", "assertion.collectionHash.match",
 		IngredientManifestValidated, "ingredient.claimSignature.validated":
 		return Success

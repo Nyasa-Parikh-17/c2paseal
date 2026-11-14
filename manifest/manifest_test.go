@@ -242,8 +242,8 @@ func checkAssertions(t *testing.T, m *Manifest, want map[string]json.RawMessage)
 			}
 		}
 	}
-	if m.Assertion(assertion.LabelDataHash) == nil {
-		t.Errorf("%s: no c2pa.hash.data", m.Label)
+	if m.Assertion(assertion.LabelDataHash) == nil && m.Assertion(assertion.LabelBMFFHashV3) == nil {
+		t.Errorf("%s: no hard binding (c2pa.hash.data or c2pa.hash.bmff.v3)", m.Label)
 	}
 }
 

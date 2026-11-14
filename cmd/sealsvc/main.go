@@ -13,10 +13,10 @@
 //
 // API:
 //
-//	POST /v1/sign     body: a JPEG, PNG or WebP file → the signed file
+//	POST /v1/sign     body: a JPEG, PNG, WebP, HEIC or AVIF file → the signed file
 //	                  query: title, source_type, no_history=1
 //	                  headers: C2paseal-Active-Manifest, C2paseal-Manifests
-//	POST /v1/verify   body: a JPEG, PNG or WebP file → JSON as `c2paseal verify --json`
+//	POST /v1/verify   body: a JPEG, PNG, WebP, HEIC or AVIF file → JSON as `c2paseal verify --json`
 //	GET  /healthz     {"status":"ok"}, no API key
 //	GET  /metrics     Prometheus text format, no API key
 //

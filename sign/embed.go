@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/webp"
@@ -26,7 +27,7 @@ type Signed struct {
 }
 
 // ErrFormat is returned by Asset for a file that is neither JPEG nor PNG.
-var ErrFormat = errors.New("sign: signing supports JPEG, PNG and WebP only")
+var ErrFormat = errors.New("sign: signing supports JPEG, PNG, WebP, HEIC and AVIF only")
 
 // ErrSidecar is returned by JPEG and PNG when Options.Sidecar is set: they
 // return only the file, so the store would be lost. Use Asset.
@@ -48,6 +49,8 @@ func Asset(in []byte, opts *Options) (*Signed, error) {
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &pngContainer{})
 	case asset.WEBP:
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &webpContainer{})
+	case asset.HEIC, asset.AVIF:
+		return embed(in, opts, buildConfig{sigLen: esSignatureLen, bmff: true}, &bmffContainer{})
 	}
 	return nil, ErrFormat
 }
@@ -93,6 +96,13 @@ type container interface {
 	finish(file []byte) error
 	// extract reads the store back from the signed file.
 	extract(file []byte) ([]byte, error)
+}
+
+// digester is a container whose hard binding is not one exclusion range
+// (ISO BMFF: c2pa.hash.bmff, which excludes boxes by path and hashes box
+// offsets): it computes the digest of the file itself.
+type digester interface {
+	digest(file []byte) ([]byte, error)
 }
 
 // embed signs in with reserve-and-backfill, in exactly this order:
@@ -147,7 +157,7 @@ func embed(in []byte, opts *Options, cfg buildConfig, c container) (*Signed, err
 	reserved := len(store)
 
 	if opts.Sidecar {
-		return external(m, stripped, store, reserved, par != nil)
+		return external(m, c, stripped, store, reserved, par != nil)
 	}
 
 	// 3. Insert the placeholder store.
@@ -166,20 +176,29 @@ func embed(in []byte, opts *Options, cfg buildConfig, c container) (*Signed, err
 		return nil
 	}
 
-	// 4. Exclusion: everything the container inserted.
-	p, err := m.SetExclusion(uint64(start), uint64(length))
+	// 4. Exclusion: everything the container inserted. 5. Hard-binding
+	// digest over everything outside it. A digester (ISO BMFF) has fixed
+	// exclusions and computes the digest itself.
+	var digest []byte
+	if d, ok := c.(digester); ok {
+		if digest, err = d.digest(file); err != nil {
+			return nil, fmt.Errorf("sign: %w", err)
+		}
+	} else {
+		p, err := m.SetExclusion(uint64(start), uint64(length))
+		if err != nil {
+			return nil, err
+		}
+		if err := write(p); err != nil {
+			return nil, err
+		}
+		h := sha256.New()
+		h.Write(file[:start])
+		h.Write(file[start+length:])
+		digest = h.Sum(nil)
+	}
+	p, err := m.SetDigest(digest)
 	if err != nil {
-		return nil, err
-	}
-	if err := write(p); err != nil {
-		return nil, err
-	}
-
-	// 5. Hard-binding digest over everything outside the exclusion.
-	h := sha256.New()
-	h.Write(file[:start])
-	h.Write(file[start+length:])
-	if p, err = m.SetDigest(h.Sum(nil)); err != nil {
 		return nil, err
 	}
 	if err := write(p); err != nil {
@@ -219,9 +238,16 @@ func embed(in []byte, opts *Options, cfg buildConfig, c container) (*Signed, err
 // external finishes a manifest kept outside the file: the hard binding
 // hashes the whole file, then the claim is signed. The size check still
 // applies, since the store's offsets were fixed when it was serialised.
-func external(m *Manifest, file, store []byte, reserved int, hasParent bool) (*Signed, error) {
+func external(m *Manifest, c container, file, store []byte, reserved int, hasParent bool) (*Signed, error) {
 	sum := sha256.Sum256(file)
-	p, err := m.SetDigest(sum[:])
+	digest := sum[:]
+	if d, ok := c.(digester); ok {
+		var err error
+		if digest, err = d.digest(file); err != nil {
+			return nil, fmt.Errorf("sign: %w", err)
+		}
+	}
+	p, err := m.SetDigest(digest)
 	if err != nil {
 		return nil, err
 	}
@@ -367,4 +393,43 @@ func (w *webpContainer) extract(file []byte) ([]byte, error) {
 		return nil, err
 	}
 	return st.JUMBF, nil
+}
+
+// bmffContainer embeds the store in a C2PA uuid box straight after ftyp,
+// moving the meta/iloc offsets, and binds it with c2pa.hash.bmff.v3.
+type bmffContainer struct {
+	box     *bmff.Box
+	dataOff int
+}
+
+func (b *bmffContainer) strip(in []byte) ([]byte, error) { return bmff.Strip(in) }
+
+func (b *bmffContainer) insert(stripped, store []byte, _ int) ([]byte, int, int, error) {
+	file, box, data, err := bmff.Insert(stripped, store)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if box.Size != bmff.InsertedSize(len(store)) || box.End()-data != len(store) {
+		return nil, 0, 0, errors.New("C2PA box does not have the expected size")
+	}
+	b.box, b.dataOff = box, data
+	return file, box.Offset, box.Size, nil
+}
+
+func (b *bmffContainer) write(file []byte, off int, data []byte) error {
+	return bmff.WriteStore(file, b.box, b.dataOff, off, data)
+}
+
+func (b *bmffContainer) finish([]byte) error { return nil }
+
+func (b *bmffContainer) extract(file []byte) ([]byte, error) {
+	st, err := bmff.Extract(file)
+	if err != nil {
+		return nil, err
+	}
+	return st.JUMBF, nil
+}
+
+func (b *bmffContainer) digest(file []byte) ([]byte, error) {
+	return bmff.Digest(sha256.New(), file, bmff.DefaultExclusions(), true)
 }

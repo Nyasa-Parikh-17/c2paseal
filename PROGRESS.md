@@ -1541,3 +1541,10 @@ passed 13/13 in Chrome 157 on Linux. Phase 22 is done. The release run
   `application/javascript` for .js. net/http takes types from the Windows
   registry. The site's file types are now fixed in `web.siteTypes`, so
   serve sends the same types on every OS; the test was not loosened.
+
+### Gate E — approved (2026-11-14)
+
+ci (all four jobs, Windows included) and pages are green on 782c110. The
+user approved v0.3.0; the CHANGELOG date was set in the `release v0.3.0`
+commit, and the tag is pushed by the user. Phase 23 is complete once the
+release workflow is green.

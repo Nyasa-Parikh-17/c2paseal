@@ -3,7 +3,7 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
-## Unreleased
+## v0.3.0 — 2026-11-14
 
 ### Added
 - **WebAssembly build** (`cmd/c2paseal-wasm`): verify and sign in the

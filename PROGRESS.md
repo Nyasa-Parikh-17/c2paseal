@@ -1327,4 +1327,9 @@ and apt.llvm.org has no LLVM 19 repository for it (`llvm.sh 19` stops at
 `apt-get update`), so the report showed Credentio as not installed. The
 interop job is now pinned to `ubuntu-24.04` (the release the local build
 used), and its cache keys name that image instead of `runner.os`, so a
-c2patool built on 26.04 is not restored there. Rerun pending.
+c2patool built on 26.04 is not restored there. Rerun (run 43576518894,
+green): Credentio built in 17.5 min (3367 Bazel actions) and was cached
+(8 MB); the harness ran it and wrote 71 files, 142 disagreements, 0
+unexplained. Its INTEROP.md matches the committed one except for the
+per-run values (generation time, manifest UUIDs of the files signed during
+the run, their time-stamp times).

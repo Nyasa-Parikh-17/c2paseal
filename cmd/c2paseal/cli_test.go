@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -101,4 +102,34 @@ func TestServe(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not stop")
 	}
+}
+
+// sign --key takes a key URI as well as a path; KMS schemes explain which
+// module provides them.
+func TestSignKeyURI(t *testing.T) {
+	cert, key := fixture(t, "pki/leaf-chain.pem"), fixture(t, "pki/leaf.key")
+	rel, err := filepath.Rel(mustWd(t), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "out.png")
+	in := fixture(t, "unsigned/small.png")
+	var stdout bytes.Buffer
+	if code := run([]string{"sign", "--json", "--cert", cert, "--key", "file:" + filepath.ToSlash(rel), "--in", in, "--out", out}, &stdout, io.Discard); code != exitValid {
+		t.Fatalf("file: URI: exit %d: %s", code, stdout.String())
+	}
+	stdout.Reset()
+	code := run([]string{"sign", "--json", "--cert", cert, "--key", "awskms:alias/c2pa", "--in", in, "--out", out}, &stdout, io.Discard)
+	if code != exitUsage || !strings.Contains(stdout.String(), "keys/awskms") {
+		t.Errorf("awskms: URI: exit %d: %s", code, stdout.String())
+	}
+}
+
+func mustWd(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return wd
 }

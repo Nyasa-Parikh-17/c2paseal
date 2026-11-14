@@ -94,6 +94,29 @@ fmt.Println(result.State()) // Invalid, Valid or Trusted
 Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
 (also `Read`, `Verify`, `VerifyFile`), or the package page on pkg.go.dev.
 
+### Keys in a KMS
+
+The signing key can be named by a URI instead of a file, so it does not
+have to sit on disk:
+
+```go
+import _ "github.com/Nyasa-Parikh-17/c2paseal/keys/awskms" // or keys/gcpkms
+
+signer, err := sign.OpenKey(ctx, "awskms:arn:aws:kms:eu-west-1:111122223333:key/…")
+chain, err := c2paseal.LoadChain("chain.pem")
+err = c2paseal.Sign("in.jpg", "out.jpg", &c2paseal.SignOptions{Chain: chain, Signer: signer})
+```
+
+- `file:` (and plain paths) are built in.
+- `awskms:` and `gcpkms:` are in their own Go modules,
+  [keys/awskms](keys/awskms) and [keys/gcpkms](keys/gcpkms), so the cloud
+  SDKs are not dependencies of this module.
+- Any other store can implement `sign.KeyProvider`; a plain
+  `crypto.Signer` also works as `SignOptions.Signer`.
+- The CLI's `sign --key` takes a file or a `file:` URI. KMS keys need a
+  program that imports the provider.
+- There is no PKCS #11: its Go bindings need CGO.
+
 ### In the browser (WebAssembly)
 
 `cmd/c2paseal-wasm` is the same library built for browsers with

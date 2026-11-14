@@ -3,6 +3,25 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Added
+- **Keys outside files.** `sign.KeyProvider` and `sign.OpenKey` open
+  signing keys named by URIs; `file:` is built in, and providers register
+  themselves when imported.
+- **AWS KMS and Google Cloud KMS** providers (`awskms:`, `gcpkms:`), each in
+  its own Go module (`keys/awskms`, `keys/gcpkms`) so the core module's
+  dependencies do not change. The private key stays in KMS. Signatures are
+  verified against the key before use, and Cloud KMS checksums are checked.
+- `sign/signtest`: issues TEST ONLY certificates for any key and checks
+  that files signed through a `crypto.Signer` verify in C2paSeal and
+  c2patool, for testing key providers.
+- `LoadChain` (a certificate chain without a key) and
+  `sign.ParsePrivateKey`.
+
+### Changed
+- `c2paseal sign --key` also takes a key URI (`file:…`).
+
 ## v0.3.0 — 2026-11-14
 
 ### Added

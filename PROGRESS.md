@@ -1548,3 +1548,100 @@ ci (all four jobs, Windows included) and pages are green on 782c110. The
 user approved v0.3.0; the CHANGELOG date was set in the `release v0.3.0`
 commit, and the tag is pushed by the user. Phase 23 is complete once the
 release workflow is green.
+
+### Phase 24 — Pluggable key providers (2026-11-14)
+
+**Decision (user, 2026-11-14):** use the official SDKs for the KMS
+providers (aws-sdk-go-v2; cloud.google.com/go/kms), each only in its own
+module.
+
+**Built**
+- `sign.KeyProvider` (`Open(ctx, *url.URL) (crypto.Signer, error)`),
+  `sign.RegisterKeyProvider` (case-insensitive scheme; panics on a
+  duplicate or nil, like `database/sql.Register`), `sign.OpenKey` and
+  `sign.KeySchemes`.
+  - `file:` is built in: `file:rel/key.pem`, `file:///abs/key.pem`,
+    `file://localhost/…`, escaped paths, and Windows `file:///C:/…`. A plain
+    path or a Windows drive path is a file too.
+  - An unregistered `awskms:`/`gcpkms:` names the module to import. Errors
+    redact the URI's user info and query.
+  - `sign.ParsePrivateKey` now holds the PEM key parsing, which the root
+    package uses too. Added `c2paseal.LoadChain`.
+  - The CLI's `sign --key` takes a path or a key URI (tested with `file:`,
+    and with `awskms:` for the error that names keys/awskms).
+- `sign/signtest`, in the core module with no new dependencies:
+  - `Chain(t, pub)` issues a leaf for any public key under the TEST ONLY
+    intermediate, with the leaf.pem profile;
+  - `Check(t, signer, chain)` signs `unsigned/small.jpg` and `small.png`
+    and requires Valid/Trusted in C2paSeal and in c2patool
+    (`C2PASEAL_REQUIRE_C2PATOOL=1` makes a missing c2patool fatal).
+  - Its own test is the baseline, with an in-memory key: c2patool says
+    Valid and Trusted.
+- `keys/awskms` (module; aws-sdk-go-v2 v1.48.0, config v1.33.18,
+  service/kms v1.62.6):
+  - `awskms:<ARN | key ID | alias/… | alias ARN>[?region][&profile][&endpoint]`;
+    the region comes from the ARN when it is not given.
+  - `New` checks ECC_NIST_P256, SIGN_VERIFY, ECDSA_SHA_256 and a P-256
+    SPKI. `Sign` sends the digest (MessageType DIGEST) and verifies the
+    returned DER signature locally before using it.
+  - It accepts nil `SignerOpts`, because go-cose passes nil (found by the
+    first test run).
+- `keys/gcpkms` (module; cloud.google.com/go/kms v1.37.0 REST client):
+  - `gcpkms:<key version name>[?endpoint]`. An `http://` endpoint gets
+    `WithoutAuthentication`, so tokens are never sent in the clear.
+  - `New` checks EC_SIGN_P256_SHA256, the PEM's CRC32C and the response
+    name. `Sign` sends the digest with its CRC32C and checks
+    verifiedDigestCrc32c, the signature's CRC32C, the name and the
+    signature itself. `Signer.Close` closes the client.
+- Both modules have `replace github.com/Nyasa-Parikh-17/c2paseal => ../..`
+  (and require v0.0.0) until the core module is tagged with this API; see
+  Open issues.
+- Fake KMS endpoints (httptest) in each module's tests:
+  - AWS: JSON 1.1 with `X-Amz-Target`; the test also checks that every
+    request is SigV4-signed for `eu-west-1/kms` with the test credentials,
+    and keeps the SDK away from this machine's credentials and config.
+  - GCP: REST with the SDK's own protobuf types; the test checks that no
+    Authorization header reaches the http:// fake.
+  - Knobs cover a wrong key spec or algorithm, wrong usage, an RSA public
+    key, unknown keys, bad checksums, a wrong response name, a signature
+    from another key, a short digest, the wrong hash, and KMS being down.
+  - `TestRealKMS` in each module runs only with
+    `C2PASEAL_AWSKMS_KEY`/`C2PASEAL_GCPKMS_KEY` and credentials. The
+    certificate is issued on the fly, so only the key is needed.
+- CI:
+  - The `test` job checks that the core module's direct dependencies are
+    exactly the three allowed (CLAUDE.md rule 2).
+  - A new `keys` job (matrix awskms, gcpkms) installs c2patool (cached
+    under the interop job's key), runs vet and staticcheck, and runs the
+    tests with c2patool required. The real-KMS tests are wired to optional
+    repository secrets (`C2PASEAL_AWSKMS_KEY`,
+    `C2PASEAL_AWS_ACCESS_KEY_ID`, `C2PASEAL_AWS_SECRET_ACCESS_KEY`,
+    `C2PASEAL_GCPKMS_KEY`, `C2PASEAL_GCP_CREDENTIALS`).
+- Docs: README "Keys in a KMS", a README in each module, CHANGELOG
+  (Unreleased).
+
+**Results (local)**
+- Files signed through each provider (fake KMS): c2patool says Valid
+  (default trust) and Trusted (TEST ONLY root), for JPEG and PNG. The same
+  holds in C2paSeal.
+- The core `go.mod`/`go.sum` are unchanged (git), and the direct
+  dependencies are still digitorus/timestamp, fxamacker/cbor and
+  veraison/go-cose.
+- gofmt, vet and staticcheck are clean in all three modules, and the full
+  core suite passes. Coverage: sign 88.5%, sign/signtest 72.3%, root 82.8%,
+  keys/awskms 96.6%, keys/gcpkms 92.1%.
+- The wasm build is unchanged in practice: 3.76 MB gzipped, 90% of the
+  budget.
+
+**Not done here (needs the user)**
+- Push. The `keys` CI job must be green.
+- A real KMS signs in CI only if the user adds the secrets above.
+
+**Open issues**
+- Until the core module is tagged with `sign.KeyProvider` (v0.4.0, Phase
+  25), the key modules build only inside this repository (`replace ../..`).
+  At v0.4.0: set their `require` to v0.4.0, drop the `replace`, and tag
+  `keys/awskms/v0.4.0` and `keys/gcpkms/v0.4.0` as well.
+- The `c2paseal` CLI cannot open KMS keys: it is in the core module, and
+  importing the providers would add their SDKs to it. sealsvc (Phase 25)
+  will need a way to use them; decide its module layout there.

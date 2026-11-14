@@ -9,6 +9,7 @@ permissions:
 
 env:
   CGO_ENABLED: "0"
+  C2PATOOL_VERSION: 0.27.21
 
 jobs:
   test:
@@ -25,6 +26,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      # CLAUDE.md rule 2: the core module depends on these three only. Key
+      # providers with cloud SDKs live in their own modules (keys/*).
+      - name: Core dependencies
+        run: |
+          got=$(go list -m -f '{{if and (not .Main) (not .Indirect)}}{{.Path}}{{end}}' all | sort | tr '\n' ' ')
+          want="github.com/digitorus/timestamp github.com/fxamacker/cbor/v2 github.com/veraison/go-cose "
+          echo "direct dependencies: $got"
+          [ "$got" = "$want" ] || { echo "core go.mod changed: want $want"; exit 1; }
       - name: Build
         run: go build ./...
       - name: Vet
@@ -72,3 +81,58 @@ jobs:
         with:
           name: c2paseal-wasm
           path: dist-wasm/
+
+  # Key providers in their own modules (keys/awskms, keys/gcpkms), tested
+  # against fake KMS endpoints; files they sign must verify in c2patool. A
+  # real KMS is used only if the repository has the secrets (see each
+  # module's TestRealKMS); otherwise those tests skip.
+  keys:
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [keys/awskms, keys/gcpkms]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    env:
+      C2PASEAL_REQUIRE_C2PATOOL: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      - name: Cache c2patool
+        id: c2patool-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/c2patool
+          key: c2patool-${{ env.C2PATOOL_VERSION }}-ubuntu-24.04
+      - name: Install c2patool
+        if: steps.c2patool-cache.outputs.cache-hit != 'true'
+        run: cargo install c2patool --version "${C2PATOOL_VERSION}" --locked
+      - name: Check c2patool
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/c2patool" --version
+      - name: Vet and staticcheck
+        run: |
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: Google credentials (only with the repository secret)
+        if: matrix.module == 'keys/gcpkms'
+        env:
+          GCP_CREDENTIALS: ${{ secrets.C2PASEAL_GCP_CREDENTIALS }}
+        run: |
+          if [ -n "$GCP_CREDENTIALS" ]; then
+            printf '%s' "$GCP_CREDENTIALS" > "$RUNNER_TEMP/gcp.json"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp.json" >> "$GITHUB_ENV"
+          fi
+      - name: Test
+        env:
+          C2PASEAL_AWSKMS_KEY: ${{ secrets.C2PASEAL_AWSKMS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.C2PASEAL_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.C2PASEAL_AWS_SECRET_ACCESS_KEY }}
+          C2PASEAL_GCPKMS_KEY: ${{ secrets.C2PASEAL_GCPKMS_KEY }}
+        run: go test -v ./...

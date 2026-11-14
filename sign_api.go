@@ -110,6 +110,35 @@ func LoadSigner(certPath, keyPath string) ([]*x509.Certificate, crypto.Signer, e
 	return parseSigner(certPEM, keyPEM, certPath, keyPath)
 }
 
+// LoadChain reads a PEM certificate chain (signer first, then
+// intermediates) for SignOptions.Chain, for a key opened separately, such as
+// with sign.OpenKey from a KMS URI.
+func LoadChain(path string) ([]*x509.Certificate, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("c2paseal: certificate: %w", err)
+	}
+	return parseChain(b, path)
+}
+
+func parseChain(certPEM []byte, name string) ([]*x509.Certificate, error) {
+	var chain []*x509.Certificate
+	for blk, rest := pem.Decode(certPEM); blk != nil; blk, rest = pem.Decode(rest) {
+		if blk.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(blk.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("c2paseal: certificate: %w", err)
+		}
+		chain = append(chain, c)
+	}
+	if len(chain) == 0 {
+		return nil, errors.New("c2paseal: certificate: no PEM certificates in " + name)
+	}
+	return chain, nil
+}
+
 // ParseSigner is LoadSigner on the PEM bytes, for callers without files
 // (such as the WebAssembly build).
 func ParseSigner(certPEM, keyPEM []byte) ([]*x509.Certificate, crypto.Signer, error) {
@@ -119,39 +148,17 @@ func ParseSigner(certPEM, keyPEM []byte) ([]*x509.Certificate, crypto.Signer, er
 // parseSigner parses a chain and a key; certName and keyName are used in
 // errors.
 func parseSigner(certPEM, keyPEM []byte, certName, keyName string) ([]*x509.Certificate, crypto.Signer, error) {
-	var chain []*x509.Certificate
-	for blk, rest := pem.Decode(certPEM); blk != nil; blk, rest = pem.Decode(rest) {
-		if blk.Type != "CERTIFICATE" {
-			continue
-		}
-		c, err := x509.ParseCertificate(blk.Bytes)
-		if err != nil {
-			return nil, nil, fmt.Errorf("c2paseal: certificate: %w", err)
-		}
-		chain = append(chain, c)
-	}
-	if len(chain) == 0 {
-		return nil, nil, errors.New("c2paseal: certificate: no PEM certificates in " + certName)
+	chain, err := parseChain(certPEM, certName)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	blk, _ := pem.Decode(keyPEM)
-	if blk == nil {
+	if blk, _ := pem.Decode(keyPEM); blk == nil {
 		return nil, nil, errors.New("c2paseal: key: no PEM block in " + keyName)
 	}
-	var key any
-	var err error
-	switch blk.Type {
-	case "EC PRIVATE KEY":
-		key, err = x509.ParseECPrivateKey(blk.Bytes)
-	default:
-		key, err = x509.ParsePKCS8PrivateKey(blk.Bytes)
-	}
+	signer, err := sign.ParsePrivateKey(keyPEM)
 	if err != nil {
-		return nil, nil, fmt.Errorf("c2paseal: key: %w", err)
-	}
-	signer, ok := key.(crypto.Signer)
-	if !ok {
-		return nil, nil, fmt.Errorf("c2paseal: key: %T cannot sign", key)
+		return nil, nil, fmt.Errorf("c2paseal: %w", err)
 	}
 	return chain, signer, nil
 }

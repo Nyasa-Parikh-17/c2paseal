@@ -3,7 +3,7 @@
 //
 //	c2paseal inspect [--json] [--recursive] <file or folder>...
 //	c2paseal verify  [--json] [--trust anchors.pem] [--recursive] <file or folder>...
-//	c2paseal sign    [--json] --cert chain.pem --key key.pem --in in --out out [--title t] [--source-type uri] [--tsa url]
+//	c2paseal sign    [--json] --cert chain.pem --key key.pem|<key URI> --in in --out out [--title t] [--source-type uri] [--tsa url]
 //	c2paseal serve   [--addr 127.0.0.1:8080] [--pki testdata/pki]
 //	c2paseal version [--json]
 //
@@ -240,7 +240,7 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 	c := newCommand("sign", "[--json] --cert chain.pem --key key.pem --in in --out out [flags]", stdout, stderr).
 		withJSON("print the result as JSON")
 	cert := c.fs.String("cert", "", "PEM certificate chain: signer first, then intermediates (required)")
-	key := c.fs.String("key", "", "PEM private key of the signer, ECDSA P-256 (required)")
+	key := c.fs.String("key", "", "the signer's ECDSA P-256 private key: a PEM file, or a key URI such as file:key.pem (required; awskms: and gcpkms: keys need a program that imports keys/awskms or keys/gcpkms)")
 	in := c.fs.String("in", "", "JPEG or PNG to sign (required)")
 	out := c.fs.String("out", "", "where to write the signed file (required)")
 	title := c.fs.String("title", "", "optional dc:title for the claim")
@@ -259,7 +259,11 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 		c.fs.Usage()
 		return exitUsage
 	}
-	chain, signer, err := c2paseal.LoadSigner(*cert, *key)
+	chain, err := c2paseal.LoadChain(*cert)
+	if err != nil {
+		return c.fail(exitUsage, err)
+	}
+	signer, err := sign.OpenKey(context.Background(), *key)
 	if err != nil {
 		return c.fail(exitUsage, err)
 	}

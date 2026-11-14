@@ -3,7 +3,7 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
-## v0.2.0 — unreleased
+## v0.2.0 — 2026-11-14
 
 ### Added
 - **Re-signing keeps the history.** Signing a file that already has

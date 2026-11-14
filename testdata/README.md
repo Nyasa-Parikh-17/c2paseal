@@ -45,6 +45,11 @@ Expected state: `Valid` (untrusted) / `Trusted` (with anchors).
 
 One defect each, made from `signed/small.*` by `scripts/mkbroken` (except `expired.jpg`).
 
+Together with `ocsp/revoked.jpg` they are the negative set: tampered pixels,
+bad signature, truncated manifest, expired certificate, wrong hash and revoked
+certificate, each rejected by C2paSeal and by c2patool (`verify.TestNegativeSet`).
+`scripts/mkbroken` is deterministic, so rerunning it rewrites the same bytes.
+
 | File | Defect | Oracle result |
 |---|---|---|
 | `data-flip.jpg` | 1 bit flipped in JPEG scan data | `assertion.dataHash.mismatch` |
@@ -54,6 +59,9 @@ One defect each, made from `signed/small.*` by `scripts/mkbroken` (except `expir
 | `truncated-app11.jpg` | file cut halfway through the APP11 segment | c2patool error: could not parse JPEG |
 | `bad-jumbf-length.jpg` | `c2pa.assertions` superbox LBox set to 0x7FFFFFF0 | c2patool error: claim superbox not found |
 | `expired.jpg` | signed by a 90-second leaf cert that has since expired, no timestamp | `signingCredential.expired` |
+| `wrong-hash.jpg`, `wrong-hash.png` | 1 bit flipped in the hash stored in `c2pa.hash.data` (image untouched; PNG CRC fixed) | `assertion.hashedURI.mismatch`, `assertion.dataHash.mismatch` |
+| `sig-flip.png` | last byte of the COSE signature flipped, CRC fixed | `claimSignature.mismatch` |
+| `truncated-cabx.png` | file cut halfway through the `caBX` chunk | c2patool error: PNG out of range |
 
 ## samples/
 

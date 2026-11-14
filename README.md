@@ -54,6 +54,9 @@ On Windows PowerShell, build with
 `$env:CGO_ENABLED=0; go build -o c2paseal.exe ./cmd/c2paseal` and run
 `.\c2paseal.exe`. Prebuilt binaries for Linux, macOS and Windows are attached
 to each [release](https://github.com/Nyasa-Parikh-17/c2paseal/releases).
+Release builds are reproducible: each release's notes give the Go version
+and the commands to rebuild its archives and compare them with its
+`SHA256SUMS`. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 If port 8080 is taken, run `./c2paseal serve --addr 127.0.0.1:8090`.
 Every command takes `-h` and `--json`. Exit codes: 0 success or valid,

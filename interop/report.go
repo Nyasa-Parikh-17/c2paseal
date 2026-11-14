@@ -99,7 +99,7 @@ func (r *report) markdown() string {
 	w("- `c2paseal+sidecar/…`: the manifest store in a `.c2pa` sidecar next to the file;\n")
 	w("- `c2paseal+remote/…`: the store only at the URL in the file's XMP.\n\n")
 	w("Remote stores (these and the c2patool fixtures in `testdata/remote/`) are served by the harness on `http://%s/` while it runs. The trust modes:\n\n", remoteAddr)
-	w("- **default**: the tool's own default trust (C2paSeal and c2patool: no anchors; c2pa-mcp: its embedded C2PA trust list).\n")
+	w("- **default**: the tool's own default trust (C2paSeal and c2patool: no anchors; c2pa-mcp: its embedded C2PA trust list; Credentio: no anchors, and it then skips the signer checks).\n")
 	w("- **trusted**: the TEST ONLY root `testdata/pki/trust-anchors.pem` as signing and time-stamping anchor.\n\n")
 	w("All signing uses the TEST ONLY PKI in `testdata/pki`, whose private keys are public.\n\n")
 
@@ -112,7 +112,11 @@ func (r *report) markdown() string {
 	w("2. **Add c2patool as the second validator.** It is the Content Authenticity Initiative's official command-line tool (built on c2pa-rs), ")
 	w("effectively the reference validator, and this project's oracle. Install a release from <https://github.com/contentauth/c2pa-rs/releases> ")
 	w("(or `cargo install c2patool`), then check `c2patool --version`.\n")
-	w("3. Run `go run ./interop`.\n\n")
+	w("3. **Add Credentio as the third validator.** It is Google's C++ C2PA library. It has no releases, so build its `c2pa_validate` tool from the commit ")
+	w("pinned in `.github/workflows/interop.yml`, with Clang 19 (libc++) and Bazel as its README describes (`bazel build tools:c2pa_validate`). ")
+	w("Put it on PATH as `c2pa_validate` or name it in `CREDENTIO_VALIDATE`, and set `CREDENTIO_COMMIT` to the commit. If it cannot be built, ")
+	w("it is shown as not installed, with the reason from `CREDENTIO_BUILD_ERROR`.\n")
+	w("4. Run `go run ./interop`.\n\n")
 	w("## Tools\n\n| Tool | Version | Status | Notes |\n|---|---|---|---|\n")
 	for _, t := range r.Tools {
 		status := "run"

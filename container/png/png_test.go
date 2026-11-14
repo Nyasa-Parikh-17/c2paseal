@@ -48,7 +48,14 @@ func TestFixtures(t *testing.T) {
 			}
 			chunks, err := Chunks(b)
 			if err != nil {
-				t.Fatal(err)
+				// A cut-off chunk is unreadable for c2patool too.
+				if !exp.Failed() {
+					t.Fatal(err)
+				}
+				if _, err := Extract(b); err == nil {
+					t.Error("Extract succeeded on a file whose chunks do not parse")
+				}
+				return
 			}
 			for _, c := range chunks {
 				if !c.CRCValid {

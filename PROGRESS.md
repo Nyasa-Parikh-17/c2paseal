@@ -27,6 +27,14 @@ Scope-creep ideas go here instead of being built.
   in Phase 18, CreativeWork and other assertions,
   signing with algorithms other than ES256 (verifying them was approved and
   added in Phase 19), keys in HSMs beyond crypto.Signer.
+- Test PKI: add the `c2pa-kp-claimSigning` EKU (1.3.6.1.4.1.62558.2.1) to
+  the TEST ONLY signer. C2PA 2.4 §14.4.1 recommends it, and Credentio
+  trusts anchors only for it, so today it stops at `signingCredential.invalid`
+  on every test-PKI file in trusted mode and checks nothing else. Needs new
+  keys and a full regeneration of the corpus and oracle files.
+- Credentio now has a writer (`tools:asset_write`, README of commit
+  ee4078b); Phase 17 recorded that it could not sign. Signing-side interop
+  (C2paSeal reading Credentio's files) is not in any phase.
 
 ## Log
 
@@ -1167,3 +1175,137 @@ needs the user.
 - The fetch path checks the responder's profile but, like c2pa-rs, not its
   trust; it does not log the profile failure c2pa-rs would log for a bad
   responder certificate.
+
+### Phase 21 — Hardening, web UI fixes, release v0.2.0 (2026-11-14)
+
+**Decision (user, 2026-11-14):** start Phase 21 with Phase 20's
+trust-list check still open. The user will get a photo from a conforming
+device (for example a Pixel 10 camera image that may be redistributed) and
+close it later.
+
+**Built**
+- Negative fixtures (`scripts/mkbroken`, deterministic: rerunning it
+  rewrites the existing files byte for byte): `wrong-hash.jpg`,
+  `wrong-hash.png` (1 bit of the hash in `c2pa.hash.data`), `sig-flip.png`,
+  `truncated-cabx.png`. PNG edits recompute chunk CRCs, so the only defect
+  is the C2PA one. Oracle output was added for the new files only:
+  rerunning the oracle on `broken/` changed nothing but the order of
+  c2patool's assertion map keys (it prints a hash map), so those files were
+  restored. `verify.TestNegativeSet` checks the six classes (tampered
+  pixels, bad signature, truncated manifest, expired, wrong hash, revoked
+  `ocsp/revoked.jpg`): Invalid with the expected failure in C2paSeal, and
+  Invalid or a refusal in c2patool.
+- Fuzzing: new `FuzzReadStore`, `FuzzTrustFiles` (root; the trust loaders
+  were split into byte-level `parseTrustAnchors`, `parseAllowedList` and
+  `parseTrustConfig`, same behaviour) and `verify.FuzzExternalStore`
+  (sidecar and remote store, the latter through a stub HTTP client).
+  `ParseRequest` was already fuzzed inside `FuzzParseResponse`. Every
+  parser added since Phase 13 now has a target.
+  `.github/workflows/fuzz.yml`: nightly (02:17 UTC) and by hand. A first
+  job finds every `Fuzz*` with grep; then one job per target (5 min, corpus
+  cached between nights); crashers are uploaded as
+  `crashers-<package>-<target>`.
+- Credentio, third external validator:
+  - Repo `mediaprovenance.googlesource.com/credentio`, pinned at
+    `ee4078badeea5739b0f0f246dbaea7803382718b` (2026-10-15 public release).
+    It has a CLI, `tools:c2pa_validate` (`--asset`, `--claim_signer_trust`,
+    `--tsa_trust`; crJSON output with the active manifest first).
+  - Build confirmed locally in WSL Ubuntu 24.04 with Bazel 9.2.0 (through
+    Bazelisk 1.26.0) and LLVM 19.1.7 clang/libc++. WSL here has no sudo and
+    no libc headers, so the toolchain was set up in user space: the LLVM
+    release tarball, glibc/libgcc/libatomic `.deb`s unpacked into a sysroot,
+    clang wrappers, `--host_cxxopt=-stdlib=libc++` for exec tools and an
+    rpath for libc++. CI uses the README's route (apt.llvm.org `llvm.sh 19`,
+    Bazelisk) and caches the binary with its libc++ libraries behind a
+    wrapper script. `-static-libstdc++` does not work: Bazel links with the
+    `clang` driver, which ignores it.
+  - Harness: `credentioTool` (`$CREDENTIO_VALIDATE` or `c2pa_validate` on
+    PATH, `$CREDENTIO_COMMIT`; when not installed it shows
+    `$CREDENTIO_BUILD_ERROR`). `explain` now explains each part separately:
+    disagreements among C2paSeal, c2patool and c2pa-mcp by the old causes,
+    and Credentio's difference from C2paSeal by `credentioCauses`. Each of
+    those matches its status pattern and facts from the file's bytes
+    (signer EKUs, claim version, store location). Before this, a matching
+    c2pa-mcp cause would have hidden any Credentio difference on the same
+    row. `WARNING:` lines on stderr are skipped when reporting an error.
+  - interop.yml builds Credentio with `continue-on-error`. If the build
+    fails, the report shows it as not installed with the reason, and it is
+    not in `-require`.
+- GitHub Actions: `actions/cache@v6`, `upload-artifact@v7`,
+  `download-artifact@v8` (all `node24`, checked in each tag's action.yml;
+  release notes read for breaking changes, none affect these workflows).
+  checkout@v6 and setup-go@v6 were already node24.
+- Web UI (display only; library, CLI and API output unchanged):
+  - (a) No store and only `claim.missing` → grey "No Content Credentials"
+    badge, a short note, and the status listed neutrally. A remote
+    reference that was not fetched (`manifest.inaccessible`) still shows
+    Invalid.
+  - (b) The drop zone is a `<label>`, inline by default, so its vertical
+    padding overlapped the banner above; now `display: block`.
+  - (c) `signingCredential.untrusted` (a failure) → amber "warning" with
+    "Signer not on your trust list."
+  - Found while checking: the per-kind border colours never applied
+    (`ul.statuses li` outranked `li.failure`); fixed. Links use the accent
+    colour (the dark-mode download link was unreadable).
+- Release: CHANGELOG.md (v0.2.0 "unreleased", v0.1.0). `scripts/archive`
+  writes tar.gz/zip with sorted entries, every time = SOURCE_DATE_EPOCH
+  (default: the commit time), owner 0, fixed modes, no gzip name or time.
+  `release.sh` builds with `-trimpath -buildvcs=true`, adds CHANGELOG.md to
+  the archives and normalizes SHA256SUMS (Windows `sha256sum` writes `*`).
+  `scripts/release-notes.sh` prints the CHANGELOG section plus "Checking a
+  release" with the Go version; release.yml publishes with `--notes-file`.
+  `.gitattributes`: `* text=auto eol=lf` (with `testdata/** -text` kept
+  last), because `core.autocrlf=true` on this machine had checked out
+  README, PROGRESS and SPEC with CRLF, and README/LICENSE/CHANGELOG go into
+  the archives and `web/index.html` into the binary. Renormalizing changed
+  no committed content.
+- README: release reproducibility and a CHANGELOG pointer.
+
+**Results**
+- Negative set: all 10 files rejected by both tools in trusted mode
+  (TestNegativeSet); TestCorpus matches c2patool on the 4 new files in both
+  modes.
+- INTEROP.md (`-require c2patool,c2pa-mcp,Credentio -strict`, Credentio
+  run from the WSL build): 71 files × 2 modes × 4 tools, 142
+  disagreements, 0 unexplained. Without Credentio: 77 disagreements, 0
+  unexplained. Credentio differs from C2paSeal on every file, for these
+  reasons:
+  - with no anchors it skips the signer checks (default mode);
+  - with anchors it requires the `c2pa-kp-claimSigning` EKU, which neither
+    test PKI has, and then reports only `signingCredential.invalid`. C2PA
+    2.4 §14.5.1.2 asks only for one EKU the validator has anchors for, and
+    §14.4.1 lists emailProtection and documentSigning as configurable;
+  - it does not validate 1.x manifests (`com.google.unsupportedSpecVersion`);
+  - it reads no sidecar or remote store;
+  - it exits with an error on broken containers;
+  - it reports a tampered assertion as `assertion.undeclared` (plus
+    `claim.hardBindings.missing` when it is the hard binding).
+- Web UI checked in a browser: headless Chrome 157 driven over the DevTools
+  protocol against `c2paseal serve` (script in the session scratchpad, not
+  committed). 16/16 checks in light and dark, at desktop width and 390 px:
+  unsigned file through the file input, tampered and trusted files through
+  a real `drop` event, the Sign button, and computed colours. Screenshots
+  inspected. The same check on the old page measured the drop zone 17 px
+  over the banner.
+- Reproducible builds: two `release.sh` runs give identical SHA256SUMS;
+  archives list owner 0/0, commit-time stamps, and 0755 only on the binary.
+  The cross-OS check is in the next entry.
+- Fuzzing, no crashers: the three new targets for 2 minutes each
+  (FuzzReadStore 11k execs, FuzzTrustFiles 13k, FuzzExternalStore 20k;
+  instrumented root and verify packages are slow on Windows), then all 21
+  targets for 45 s each, all ok (from 184 execs for FuzzToken to 2.2M for
+  jpeg FuzzExtract, run alongside the Bazel build).
+- gofmt, build, vet, staticcheck and the full suite are clean. Coverage:
+  root 82.8%, verify 90.7%, web 85.9%, png 92.3%.
+
+**Not done here (needs the user)**
+- Push, then CI: `ci`, the first nightly `fuzz` run (or start it by hand),
+  and `interop` (its Credentio build on GitHub has not run yet).
+- Tag `v0.2.0` (gate D: ask first). Set the CHANGELOG date before tagging.
+  The release workflow cannot be green until then.
+
+**Open issues**
+- Credentio's default mode is not comparable on trust (it skips the
+  checks), and its trusted mode stops at the EKU. See Future work
+  (claimSigning EKU).
+- The browser check script is not in the repo (it needs Node and Chrome).

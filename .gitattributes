@@ -1,3 +1,8 @@
-# Fixtures and oracle output must stay byte-exact on every OS.
-testdata/** -text
+# Text files are checked out with LF on every OS, so release builds are
+# reproducible from a Windows checkout (README, LICENSE and CHANGELOG go into
+# the archives, and web/index.html is embedded in the binary).
+* text=auto eol=lf
 *.sh text eol=lf
+# Fixtures and oracle output must stay byte-exact on every OS. Later lines
+# win, so this stays last.
+testdata/** -text

@@ -148,10 +148,22 @@ func external(dir string, env []string, name string, args ...string) ([]byte, in
 		code = ee.ExitCode()
 		err = nil
 		if len(out) == 0 {
-			err = errors.New(firstLine(stderr.String()))
+			err = errors.New(firstLine(withoutWarnings(stderr.String())))
 		}
 	}
 	return out, code, err
+}
+
+// withoutWarnings drops "WARNING: ..." lines (Credentio prints them before
+// the real error), so the reported error is the line that explains it.
+func withoutWarnings(s string) string {
+	var keep []string
+	for _, l := range strings.Split(s, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "WARNING:") {
+			keep = append(keep, l)
+		}
+	}
+	return strings.Join(keep, "\n")
 }
 
 func firstLine(s string) string {
@@ -317,6 +329,103 @@ func (c *c2paMCPTool) run(path string, m mode) outcome {
 		}
 	}
 	o.Native = fmt.Sprintf("valid=%v", rep.Valid)
+	deriveState(&o)
+	return o
+}
+
+// --- Credentio ---
+
+// Credentio (Google's C++ C2PA library) has no releases, so the binary is
+// built from a pinned commit (see .github/workflows/interop.yml) and named
+// by $CREDENTIO_VALIDATE or found as c2pa_validate on PATH. The commit is
+// passed in $CREDENTIO_COMMIT. If the build failed, $CREDENTIO_BUILD_ERROR
+// says why, and the tool is shown as not installed with that reason.
+type credentioTool struct {
+	path, anchors string
+	commit, note  string
+}
+
+func newCredentio(td string) tool {
+	t := &credentioTool{anchors: filepath.Join(td, "pki", "trust-anchors.pem"), commit: os.Getenv("CREDENTIO_COMMIT")}
+	p := os.Getenv("CREDENTIO_VALIDATE")
+	if p == "" {
+		p, _ = exec.LookPath("c2pa_validate")
+	}
+	if p != "" {
+		if _, err := os.Stat(p); err == nil {
+			t.path = p
+		}
+	}
+	if t.path == "" {
+		t.note = os.Getenv("CREDENTIO_BUILD_ERROR")
+	}
+	return t
+}
+
+func (c *credentioTool) info() toolInfo {
+	version := "commit " + c.commit
+	if c.commit == "" {
+		version = "unknown commit (set CREDENTIO_COMMIT)"
+	}
+	note := "Google's C++ C2PA library (`tools:c2pa_validate`, crJSON output); no releases, built from a pinned commit"
+	if c.path == "" && c.note != "" {
+		note += ". Not built: " + c.note
+	}
+	return toolInfo{Name: "Credentio", Version: version, Installed: c.path != "", Note: note}
+}
+
+func (c *credentioTool) run(path string, m mode) outcome {
+	if c.path == "" {
+		o := outcome{Skipped: true}
+		deriveState(&o)
+		return o
+	}
+	args := []string{"--asset=" + path, "--output_format=crjson"}
+	if m == modeTrusted {
+		args = append(args, "--claim_signer_trust="+c.anchors, "--tsa_trust="+c.anchors)
+	}
+	out, code, err := external(filepath.Dir(path), nil, c.path, args...)
+	o := outcome{ExitCode: code}
+	if err == nil && code != 0 {
+		err = errors.New("exit code " + fmt.Sprint(code) + ": " + firstLine(string(out)))
+	}
+	if err != nil {
+		o.Err = err.Error()
+		deriveState(&o)
+		return o
+	}
+	var rep struct {
+		// The active manifest comes first (Credentio lists the store from
+		// its last manifest backwards).
+		Manifests []struct {
+			Results struct {
+				Success       []struct{ Code string } `json:"success"`
+				Informational []struct{ Code string } `json:"informational"`
+				Failure       []struct{ Code string } `json:"failure"`
+			} `json:"validationResults"`
+		} `json:"manifests"`
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		o.Err = "unparseable output: " + firstLine(string(out))
+		deriveState(&o)
+		return o
+	}
+	if len(rep.Manifests) == 0 {
+		o.Err = "no manifests in the crJSON output"
+		deriveState(&o)
+		return o
+	}
+	a := rep.Manifests[0].Results
+	for _, s := range a.Success {
+		o.Success = append(o.Success, s.Code)
+	}
+	for _, s := range a.Informational {
+		o.Info = append(o.Info, s.Code)
+	}
+	for _, s := range a.Failure {
+		o.Failure = append(o.Failure, s.Code)
+	}
+	o.Native = "crJSON"
 	deriveState(&o)
 	return o
 }

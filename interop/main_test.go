@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDeriveState(t *testing.T) {
 	for _, tt := range []struct {
@@ -51,5 +54,40 @@ func TestDisagreementAndCauses(t *testing.T) {
 	rep = &report{Rows: []row{*mk(ok, ok, odd)}}
 	if rep.unexplained() != 2 {
 		t.Errorf("unknown pattern: %d unexplained, want 2", rep.unexplained())
+	}
+}
+
+// TestCredentioCauses: a disagreement is explained only if every part is.
+// Item paths are missing files, so only the status patterns can match.
+func TestCredentioCauses(t *testing.T) {
+	mk := func(seal, tool, mcp, cr outcome) *row {
+		r := &row{Item: item{Name: "x", Path: "does-not-exist.jpg"}}
+		for name, o := range map[string]outcome{"C2paSeal": seal, "c2patool": tool, "c2pa-mcp": mcp, "Credentio": cr} {
+			deriveState(&o)
+			r.Results = append(r.Results, result{Tool: name, Mode: modeTrusted, Outcome: o})
+		}
+		return r
+	}
+	ok := outcome{}
+	stamp := outcome{Failure: []string{"timeStamp.untrusted"}}
+	noStore := outcome{Err: "Validation failed: NOT_FOUND: No manifest store found"}
+	missing := outcome{Failure: []string{"claim.missing"}}
+
+	// Credentio alone differs, with a known pattern: explained.
+	if c := explain(mk(missing, missing, missing, noStore), modeTrusted); c == nil || !strings.HasPrefix(c.Who, "Credentio") {
+		t.Errorf("unsigned file: cause %+v", c)
+	}
+	// Credentio alone differs, unknown pattern: unexplained.
+	if c := explain(mk(ok, ok, ok, outcome{Failure: []string{"claimSignature.mismatch"}}), modeTrusted); c != nil {
+		t.Errorf("unknown Credentio pattern explained by %q", c.Who)
+	}
+	// The c2pa-mcp part is explained but Credentio's is not: unexplained.
+	ok.Info = []string{"timeStamp.untrusted"}
+	if c := explain(mk(ok, ok, stamp, outcome{Failure: []string{"claimSignature.mismatch"}}), modeTrusted); c != nil {
+		t.Errorf("half-explained disagreement explained by %q", c.Who)
+	}
+	// Both parts known: the cause names both.
+	if c := explain(mk(ok, ok, stamp, ok), modeTrusted); c == nil || strings.Contains(c.Who, ";") {
+		t.Errorf("c2pa-mcp only: cause %+v", c)
 	}
 }

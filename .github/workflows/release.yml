@@ -2,7 +2,9 @@ name: release
 
 # On a version tag: run the full checks, cross-compile the CLI for Linux,
 # macOS and Windows with CGO_ENABLED=0, check one binary on each OS, and
-# publish a GitHub release with the archives and SHA256SUMS.
+# publish a GitHub release with the archives and SHA256SUMS. The build is
+# reproducible (scripts/release.sh); the release notes are the version's
+# CHANGELOG.md section plus how to check that, naming the Go version used.
 on:
   push:
     tags: ["v*"]
@@ -40,10 +42,16 @@ jobs:
           go-version-file: go.mod
       - name: Build archives
         run: sh scripts/release.sh "${GITHUB_REF_NAME}" dist
-      - uses: actions/upload-artifact@v4
+      - name: Write release notes
+        run: sh scripts/release-notes.sh "${GITHUB_REF_NAME}" > notes.md
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notes
+          path: notes.md
 
   # Unpack the native archive on each OS and run the binary against the
   # bundled test PKI: sign, then verify as Trusted.
@@ -62,7 +70,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
@@ -85,11 +93,14 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: notes
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag

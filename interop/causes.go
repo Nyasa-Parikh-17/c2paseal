@@ -217,7 +217,49 @@ func v1Stamp(r *row, seal, tool, mcp outcome) bool {
 	return err == nil && st.Active.Claim.Version == 1
 }
 
+// explain returns the cause of a disagreement, or nil if any part of it is
+// unexplained. The parts are explained separately: a disagreement among
+// C2paSeal, c2patool and c2pa-mcp by the entries above, and Credentio's
+// difference from C2paSeal by credentioCauses. When both apply, the cause
+// joins the two.
 func explain(r *row, m mode) *cause {
+	var parts []cause
+	if disagree(r, m, "C2paSeal", "c2patool", "c2pa-mcp") {
+		c := explainBase(r, m)
+		if c == nil {
+			return nil
+		}
+		parts = append(parts, *c)
+	}
+	if disagree(r, m, "C2paSeal", "Credentio") {
+		c := explainCredentio(r, m)
+		if c == nil {
+			return nil
+		}
+		parts = append(parts, *c)
+	}
+	switch len(parts) {
+	case 0:
+		return nil
+	case 1:
+		return &parts[0]
+	}
+	return &cause{Who: parts[0].Who + "; " + parts[1].Who, Text: parts[0].Text + "\n\n**And (" + parts[1].Who + ").** " + parts[1].Text}
+}
+
+// disagree reports whether the installed tools among names give different
+// results for the file in mode m.
+func disagree(r *row, m mode, names ...string) bool {
+	keys := map[string]bool{}
+	for _, n := range names {
+		if o := r.find(n, m); !o.Skipped {
+			keys[key(o)] = true
+		}
+	}
+	return len(keys) > 1
+}
+
+func explainBase(r *row, m mode) *cause {
 	for _, c := range causes {
 		if c.match(r, m) {
 			cc := c.cause

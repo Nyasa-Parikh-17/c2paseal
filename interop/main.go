@@ -2,12 +2,13 @@
 // and over files C2paSeal signs, and regenerates INTEROP.md: a file × tool
 // matrix and a section per disagreement with its byte-level cause.
 //
-//	go run ./interop [-out INTEROP.md] [-work dir] [-require c2patool,c2pa-mcp] [-strict]
+//	go run ./interop [-out INTEROP.md] [-work dir] [-require c2patool,c2pa-mcp,Credentio] [-strict]
 //
-// Tools: C2paSeal (in process), c2patool (the c2pa-rs reference CLI) and
-// c2pa-mcp (a pure-Go CLI over github.com/richardwooding/c2pa). External
-// tools are run as separate programs; a tool that is not on PATH is listed
-// as not installed, never replaced by something else.
+// Tools: C2paSeal (in process), c2patool (the c2pa-rs reference CLI),
+// c2pa-mcp (a pure-Go CLI over github.com/richardwooding/c2pa) and
+// Credentio (Google's C++ library, its c2pa_validate tool). External tools
+// are run as separate programs; a tool that is not installed is listed as
+// not installed, never replaced by something else.
 package main
 
 import (
@@ -38,7 +39,7 @@ type item struct {
 func main() {
 	out := flag.String("out", "", "report to write (default INTEROP.md in the repository root)")
 	work := flag.String("work", "", "directory for C2paSeal-signed outputs (default a temporary directory)")
-	require := flag.String("require", "", "comma-separated tools that must be installed (e.g. c2patool,c2pa-mcp); fail otherwise")
+	require := flag.String("require", "", "comma-separated tools that must be installed (e.g. c2patool,c2pa-mcp,Credentio); fail otherwise")
 	strict := flag.Bool("strict", false, "exit 1 if any disagreement is unexplained")
 	flag.Parse()
 	if err := run(*out, *work, *require, *strict); err != nil {
@@ -81,7 +82,7 @@ func run(out, work, require string, strict bool) error {
 	}
 	corpus = append(corpus, signed...)
 
-	tools := []tool{newC2paSeal(td), newC2patool(root, td), newC2paMCP(td)}
+	tools := []tool{newC2paSeal(td), newC2patool(root, td), newC2paMCP(td), newCredentio(td)}
 	for _, name := range strings.Split(require, ",") {
 		if name = strings.TrimSpace(name); name == "" {
 			continue

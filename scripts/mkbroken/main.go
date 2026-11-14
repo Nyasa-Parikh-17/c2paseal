@@ -30,6 +30,10 @@ var variants = []variant{
 	{"truncated-app11.jpg", "small.jpg", truncateAPP11},
 	{"bad-jumbf-length.jpg", "small.jpg", badJUMBFLength},
 	{"data-flip.png", "small.png", flipPNGData},
+	{"wrong-hash.jpg", "small.jpg", wrongHash},
+	{"wrong-hash.png", "small.png", pngFixCRC(wrongHash)},
+	{"sig-flip.png", "small.png", pngFixCRC(flipSignature)},
+	{"truncated-cabx.png", "small.png", truncateCaBX},
 }
 
 func main() {
@@ -177,4 +181,55 @@ func flipPNGData(b []byte) ([]byte, error) {
 		i += 12 + n
 	}
 	return nil, errors.New("no IDAT chunk")
+}
+
+// wrongHash changes one byte of the expected hash stored in the
+// c2pa.hash.data assertion. The image is untouched, so the recorded hash no
+// longer matches it (and the assertion's hashed URI no longer matches the
+// claim, since the assertion bytes changed).
+func wrongHash(b []byte) ([]byte, error) {
+	off, n, err := contentBoxAfterLabel(b, "c2pa.hash.data")
+	if err != nil {
+		return nil, err
+	}
+	// CBOR text "hash" followed by a 32-byte byte string header.
+	key := []byte("\x64hash\x58\x20")
+	i := bytes.Index(b[off:off+n], key)
+	if i < 0 {
+		return nil, errors.New("hash field not found in c2pa.hash.data")
+	}
+	b[off+i+len(key)] ^= 0x01
+	return b, nil
+}
+
+// pngFixCRC wraps a mutation of a PNG so that every chunk CRC is recomputed
+// afterwards: the defect is then only in the C2PA data, not the container.
+func pngFixCRC(mutate func([]byte) ([]byte, error)) func([]byte) ([]byte, error) {
+	return func(b []byte) ([]byte, error) {
+		b, err := mutate(b)
+		if err != nil {
+			return nil, err
+		}
+		for i := 8; i+12 <= len(b); {
+			n := int(binary.BigEndian.Uint32(b[i:]))
+			if i+12+n > len(b) {
+				return nil, errors.New("png: chunk past end of file")
+			}
+			binary.BigEndian.PutUint32(b[i+8+n:], crc32.ChecksumIEEE(b[i+4:i+8+n]))
+			i += 12 + n
+		}
+		return b, nil
+	}
+}
+
+// truncateCaBX cuts the file in the middle of the caBX chunk.
+func truncateCaBX(b []byte) ([]byte, error) {
+	for i := 8; i+12 <= len(b); {
+		n := int(binary.BigEndian.Uint32(b[i:]))
+		if string(b[i+4:i+8]) == "caBX" {
+			return b[:i+8+n/2], nil
+		}
+		i += 12 + n
+	}
+	return nil, errors.New("no caBX chunk")
 }

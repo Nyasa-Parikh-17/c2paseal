@@ -83,6 +83,12 @@ func LoadTrustAnchors(path string) ([]*x509.Certificate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: trust anchors: %w", err)
 	}
+	return parseTrustAnchors(b, path)
+}
+
+// parseTrustAnchors is LoadTrustAnchors on the file's bytes; name is used
+// in errors.
+func parseTrustAnchors(b []byte, name string) ([]*x509.Certificate, error) {
 	var out []*x509.Certificate
 	for blk, rest := pem.Decode(b); blk != nil; blk, rest = pem.Decode(rest) {
 		if blk.Type != "CERTIFICATE" {
@@ -95,7 +101,7 @@ func LoadTrustAnchors(path string) ([]*x509.Certificate, error) {
 		out = append(out, c)
 	}
 	if len(out) == 0 {
-		return nil, errors.New("c2paseal: trust anchors: no PEM certificates in " + path)
+		return nil, errors.New("c2paseal: trust anchors: no PEM certificates in " + name)
 	}
 	return out, nil
 }
@@ -116,6 +122,12 @@ func LoadAllowedList(path string) ([][sha256.Size]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: allowed list: %w", err)
 	}
+	return parseAllowedList(b, path)
+}
+
+// parseAllowedList is LoadAllowedList on the file's bytes; name is used in
+// errors.
+func parseAllowedList(b []byte, name string) ([][sha256.Size]byte, error) {
 	var out [][sha256.Size]byte
 	inside := false
 	for _, line := range strings.Split(string(b), "\n") {
@@ -137,7 +149,7 @@ func LoadAllowedList(path string) ([][sha256.Size]byte, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, errors.New("c2paseal: allowed list: no certificates or hashes in " + path)
+		return nil, errors.New("c2paseal: allowed list: no certificates or hashes in " + name)
 	}
 	return out, nil
 }
@@ -150,13 +162,18 @@ func LoadTrustConfig(path string) ([]asn1.ObjectIdentifier, error) {
 	if err != nil {
 		return nil, fmt.Errorf("c2paseal: trust config: %w", err)
 	}
+	return parseTrustConfig(b), nil
+}
+
+// parseTrustConfig is LoadTrustConfig on the file's bytes.
+func parseTrustConfig(b []byte) []asn1.ObjectIdentifier {
 	var out []asn1.ObjectIdentifier
 	for _, line := range strings.Split(string(b), "\n") {
 		if oid, ok := parseOID(strings.TrimSpace(line)); ok {
 			out = append(out, oid)
 		}
 	}
-	return out, nil
+	return out
 }
 
 // parseOID parses dotted decimal with at least two arcs.

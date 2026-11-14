@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
@@ -10,7 +11,8 @@ import (
 )
 
 // TestHashChecks: every assertion reference matches in every fixture except
-// assertion-flip.jpg, where exactly the actions assertion mismatches.
+// assertion-flip.jpg, where exactly the actions assertion mismatches, and
+// wrong-hash.*, where exactly the data hash assertion mismatches.
 func TestHashChecks(t *testing.T) {
 	all, err := fixtures.List()
 	if err != nil {
@@ -48,7 +50,8 @@ func TestHashChecks(t *testing.T) {
 				if c.Err != nil {
 					t.Errorf("%s: %s: %v", f, c.Ref.URL, c.Err)
 				}
-				wantMatch := !(f.Name == "assertion-flip.jpg" && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.actions.v2")
+				wantMatch := !(f.Name == "assertion-flip.jpg" && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.actions.v2") &&
+					!(strings.HasPrefix(f.Name, "wrong-hash.") && c.Ref.URL == "self#jumbf=c2pa.assertions/c2pa.hash.data")
 				if legacy {
 					continue // statuses are checked against the oracle in verify
 				}

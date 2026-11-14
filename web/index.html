@@ -8,13 +8,13 @@
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --text: #1c1c1a; --muted: #5d5d58; --border: #d9d9d4;
     --ok: #1d7a3c; --ok-bg: #e5f4ea; --info: #8a5a00; --info-bg: #fbf1dc; --bad: #b3261e; --bad-bg: #fbe6e4;
-    --accent: #2f5bd3; --warn-bg: #fff4cc; --warn-border: #e0b400;
+    --accent: #2f5bd3; --warn-bg: #fff4cc; --warn-border: #e0b400; --warn: #7a5300; --none-bg: #ececea;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #161615; --panel: #20201e; --text: #ececea; --muted: #a5a59f; --border: #3a3a36;
       --ok: #6fd18f; --ok-bg: #173322; --info: #f0c060; --info-bg: #3a2e12; --bad: #ff8a80; --bad-bg: #3d1a17;
-      --accent: #8ab0ff; --warn-bg: #3a3212; --warn-border: #a88600;
+      --accent: #8ab0ff; --warn-bg: #3a3212; --warn-border: #a88600; --warn: #f5cf5a; --none-bg: #2c2c29;
     }
   }
   * { box-sizing: border-box; }
@@ -24,7 +24,9 @@
   h2 { font-size: 1.1rem; margin: 0 0 12px; }
   p.lead { color: var(--muted); margin: 0 0 16px; }
   .banner { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
-  .drop { border: 2px dashed var(--border); border-radius: 12px; background: var(--panel); padding: 32px 16px; text-align: center; cursor: pointer; }
+  /* display: block, not the label's default inline: inline padding does not
+     take up space, so the drop zone's top padding overlapped the banner. */
+  .drop { display: block; border: 2px dashed var(--border); border-radius: 12px; background: var(--panel); padding: 32px 16px; text-align: center; cursor: pointer; }
   .drop.over { border-color: var(--accent); }
   .drop input { display: none; }
   .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 12px 0 20px; }
@@ -36,11 +38,17 @@
   .state { display: inline-block; font-weight: 600; padding: 2px 10px; border-radius: 999px; margin-bottom: 12px; }
   .state.Trusted, .state.Valid { color: var(--ok); background: var(--ok-bg); }
   .state.Invalid { color: var(--bad); background: var(--bad-bg); }
+  .state.none { color: var(--muted); background: var(--none-bg); }
+  p.note { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
   ul.statuses { list-style: none; padding: 0; margin: 0 0 12px; }
   ul.statuses li { border-left: 4px solid var(--border); padding: 4px 10px; margin: 4px 0; border-radius: 4px; }
-  li.success { border-color: var(--ok); background: var(--ok-bg); }
-  li.informational { border-color: var(--info); background: var(--info-bg); }
-  li.failure { border-color: var(--bad); background: var(--bad-bg); }
+  /* ul.statuses in front, so these outrank the default border above. */
+  ul.statuses li.success { border-color: var(--ok); background: var(--ok-bg); }
+  ul.statuses li.informational { border-color: var(--info); background: var(--info-bg); }
+  ul.statuses li.failure { border-color: var(--bad); background: var(--bad-bg); }
+  ul.statuses li.warning { border-color: var(--warn-border); background: var(--warn-bg); }
+  ul.statuses li.warning .label { color: var(--warn); font-weight: 600; }
+  ul.statuses li.neutral { border-color: var(--border); }
   li code { font-weight: 600; }
   li .why { display: block; color: var(--muted); font-size: .85rem; word-break: break-word; }
   li .scope { font-size: .8rem; color: var(--muted); }
@@ -50,6 +58,7 @@
   .tree .k { color: var(--accent); }
   .tree .v { word-break: break-all; }
   .err { color: var(--bad); }
+  a { color: var(--accent); }
   a.download { display: inline-block; margin-top: 8px; }
 </style>
 </head>
@@ -109,6 +118,22 @@ function tree(value, key) {
   return div;
 }
 
+// These change only how results are shown; the statuses and the state are
+// the library's, unchanged.
+//
+// noCredentials: the file has no C2PA manifest at all. The library reports
+// that as Invalid with claim.missing, which is correct for a validator but
+// reads as "tampered" to a person; most images simply have none.
+function noCredentials(a) {
+  const st = a.statuses || [];
+  return !a.manifest_store && st.length > 0 && st.every((s) => s.code === "claim.missing");
+}
+
+// untrusted: the signer's certificate does not chain to a trust anchor.
+// The manifest itself is intact, so this is shown as a warning, not a
+// failure.
+const isUntrusted = (s) => s.code === "signingCredential.untrusted" && s.kind === "failure";
+
 function render(panel, a) {
   const body = panel.querySelector(".body");
   body.replaceChildren();
@@ -116,12 +141,21 @@ function render(panel, a) {
   if (a.error) { body.append(el("p", "err", a.error)); return; }
   body.append(el("div", "meta", a.file + " · " + (a.format || "unknown format") + " · " + a.size + " bytes" +
     (a.trusted_test_root ? " · test root trusted" : "")));
-  body.append(el("span", "state " + a.validation_state, a.validation_state));
+  const none = noCredentials(a);
+  if (none) {
+    body.append(el("span", "state none", "No Content Credentials"));
+    body.append(el("p", "note", "This file has no C2PA manifest, so there is nothing to validate. That is not a sign of tampering: most images have none."));
+  } else {
+    body.append(el("span", "state " + a.validation_state, a.validation_state));
+  }
   const ul = el("ul", "statuses");
   for (const s of a.statuses || []) {
-    const li = el("li", s.kind);
+    const warn = isUntrusted(s);
+    const li = el("li", none ? "neutral" : warn ? "warning" : s.kind);
     if (s.scope !== "active manifest") li.append(el("span", "scope", s.scope + " "));
-    li.append(el("code", "", s.code), " ", el("span", "meta", "(" + s.kind + ")"));
+    const kind = none ? "no manifest" : warn ? "warning" : s.kind;
+    li.append(el("code", "", s.code), " ", el("span", "meta", "(" + kind + ")"));
+    if (warn) li.append(el("span", "why label", "Signer not on your trust list."));
     if (s.explanation) li.append(el("span", "why", s.explanation));
     ul.append(li);
   }
@@ -132,7 +166,7 @@ function render(panel, a) {
     root.open = true;
     t.append(root);
     body.append(t);
-  } else if (a.read_error) {
+  } else if (a.read_error && !none) {
     body.append(el("p", "meta", "No readable manifest store: " + a.read_error));
   }
   if (a.signed) {

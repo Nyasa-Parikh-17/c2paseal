@@ -1,7 +1,7 @@
 name: interop
 
-# Regenerates INTEROP.md with every validator installed. Runs on version
-# tags, and by hand from the Actions tab.
+# Regenerates INTEROP.md with every validator installed (c2patool, c2pa-mcp
+# and Credentio). Runs on version tags, and by hand from the Actions tab.
 on:
   push:
     tags: ["v*"]
@@ -14,6 +14,8 @@ env:
   CGO_ENABLED: "0"
   C2PATOOL_VERSION: "0.27.21"
   C2PA_MCP_VERSION: "v0.7.1"
+  # Credentio has no version numbers; this is its 2026-10-15 public release.
+  CREDENTIO_COMMIT: "ee4078badeea5739b0f0f246dbaea7803382718b"
 
 jobs:
   interop:
@@ -37,7 +39,7 @@ jobs:
       #    (preinstalled on GitHub's Ubuntu runners) at a pinned version.
       - name: Cache c2patool
         id: c2patool-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/c2patool
           key: c2patool-${{ env.C2PATOOL_VERSION }}-${{ runner.os }}
@@ -49,11 +51,53 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/c2patool" --version
 
-      # 3. Regenerate the report. -require fails the job if either tool is
-      #    missing; -strict fails it on any unexplained disagreement.
+      # 3. Credentio, Google's C++ C2PA library, is the third validator. It
+      #    has no releases, so its c2pa_validate tool is built from the pinned
+      #    commit with Clang 19 (libc++) and Bazel, as its README describes.
+      #    Its libc++ libraries are cached next to it behind a small wrapper,
+      #    so a cached build runs without LLVM installed. If the build fails, the harness shows Credentio as
+      #    not installed, with the reason; no other tool stands in for it.
+      - name: Cache Credentio
+        id: credentio-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/credentio-bin
+          key: credentio-${{ env.CREDENTIO_COMMIT }}-${{ runner.os }}
+      - name: Build Credentio
+        if: steps.credentio-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 19 all > /dev/null
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
+          sudo curl -fsSLo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.26.0/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+          git clone -q https://mediaprovenance.googlesource.com/credentio "$RUNNER_TEMP/credentio"
+          cd "$RUNNER_TEMP/credentio"
+          git checkout -q "$CREDENTIO_COMMIT"
+          bazel build tools:c2pa_validate
+          mkdir -p ~/credentio-bin/lib
+          cp bazel-bin/tools/c2pa_validate ~/credentio-bin/c2pa_validate.bin
+          ldd ~/credentio-bin/c2pa_validate.bin | awk '/libc\+\+|libunwind|libatomic/ {print $3}' | xargs -r cp -L -t ~/credentio-bin/lib/
+          printf '%s\n' '#!/bin/sh' 'd=$(dirname "$0")' 'LD_LIBRARY_PATH="$d/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$d/c2pa_validate.bin" "$@"' > ~/credentio-bin/c2pa_validate
+          chmod +x ~/credentio-bin/c2pa_validate
+      - name: Check Credentio
+        run: |
+          bin="$HOME/credentio-bin/c2pa_validate"
+          if [ -x "$bin" ] && "$bin" --asset=testdata/signed/small.jpg > /dev/null; then
+            echo "CREDENTIO_VALIDATE=$bin" >> "$GITHUB_ENV"
+          else
+            echo "CREDENTIO_BUILD_ERROR=bazel build tools:c2pa_validate failed at commit ${CREDENTIO_COMMIT} on ubuntu-latest (see the Build Credentio step)" >> "$GITHUB_ENV"
+          fi
+
+      # 4. Regenerate the report. -require fails the job if c2patool or
+      #    c2pa-mcp is missing; -strict fails it on any unexplained
+      #    disagreement.
       - name: Run the interop harness
         run: go run ./interop -require c2patool,c2pa-mcp -strict
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: INTEROP.md

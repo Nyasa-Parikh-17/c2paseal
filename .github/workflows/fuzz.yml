@@ -1,0 +1,72 @@
+name: fuzz
+
+# Runs every Go fuzz target nightly, one job each. Targets are found with
+# grep, so a new Fuzz* function is picked up without editing this file.
+# A crasher fails its job and is kept as an artefact
+# (crashers-<package>-<target>); copy it into the package's
+# testdata/fuzz/<target>/ to reproduce it with `go test`.
+on:
+  schedule:
+    - cron: "17 2 * * *" # 02:17 UTC
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "Time per target (Go duration)"
+        default: "5m"
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.find.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: find
+        name: Find fuzz targets
+        run: |
+          matrix=$(grep -rHo --include='*_test.go' '^func Fuzz[A-Za-z0-9_]*' . \
+            | sed -E 's#^\./(.*)/[^/]*:func (Fuzz.*)#\1 \2#; s#^\./[^/]*:func (Fuzz.*)#. \1#' \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(length > 0) | split(" ")
+                | {pkg: .[0], target: .[1], id: ((.[0] | gsub("[/.]"; "-") | ltrimstr("-")) + (if .[0] == "." then "" else "-" end) + .[1])})')
+          echo "$matrix" | jq .
+          [ "$(echo "$matrix" | jq length)" -gt 0 ]
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    needs: targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    name: ${{ matrix.id }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Keep the generated corpus between nights, so each run builds on the
+      # last one.
+      - name: Restore corpus
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ matrix.id }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ matrix.id }}-
+      - name: Fuzz
+        run: go test "./${{ matrix.pkg }}" -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime "${{ inputs.fuzztime || '5m' }}"
+      - name: Keep crashers
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: crashers-${{ matrix.id }}
+          path: ${{ matrix.pkg }}/testdata/fuzz/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30

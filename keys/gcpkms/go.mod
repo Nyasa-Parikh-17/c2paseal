@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	cloud.google.com/go/kms v1.37.0
-	github.com/Nyasa-Parikh-17/c2paseal v0.0.0-00010101000000-000000000000
+	github.com/Nyasa-Parikh-17/c2paseal v0.4.0
 	github.com/googleapis/gax-go/v2 v2.27.0
 	google.golang.org/api v0.315.0
 	google.golang.org/protobuf v1.36.12
@@ -48,6 +48,6 @@ require (
 	google.golang.org/grpc v1.85.0 // indirect
 )
 
-// Until the core module is tagged with the sign.KeyProvider API (v0.4.0),
-// build against the copy in this repository.
+// Builds in this repository use the local copy; users of the module get
+// the version required above (a directory replace is ignored outside).
 replace github.com/Nyasa-Parikh-17/c2paseal => ../..

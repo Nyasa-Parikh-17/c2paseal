@@ -1877,3 +1877,28 @@ c2pa-v0.90.21, the version under c2patool 0.27.21):
 **Open issues**
 - `.wasm` budget headroom is down to about 10%; HEIC/AVIF (Phase 27) will
   add code. Look at what grows before raising it.
+
+### v0.4.0 released; module versions (2026-11-14)
+
+- Release run 43606987182 passed (test, build, image, smoke on three OSes,
+  publish). The sealsvc image is on GHCR as `v0.4.0`, `0.4.0`, `0.4` and
+  `latest` (linux/amd64 and arm64). Phase 26's ci (43606984498) passed.
+  Phase 26 is done.
+- keys/awskms, keys/gcpkms and cmd/sealsvc now *require* real versions
+  (core v0.4.0; sealsvc also keys/* v0.4.0) and keep their directory
+  `replace` lines. Builds in the repository use the local code (so sealsvc
+  gets WebP from the current core), while users of a tagged module get the
+  required versions: a directory replace is ignored outside its own module,
+  and Go does not fetch a version replaced by a directory.
+- Release checklist from now on: in the release commit, set those require
+  lines to the version being released; after tagging `vX.Y.Z`, also tag
+  `keys/awskms/vX.Y.Z`, `keys/gcpkms/vX.Y.Z` and `cmd/sealsvc/vX.Y.Z` at the
+  same commit. For v0.4.0 the key modules are tagged at this commit (their
+  code is unchanged since the v0.4.0 tag); sealsvc gets its first module
+  tag with v0.5.0.
+- `go mod tidy` fails in this working folder (OneDrive) with "no Go source
+  files" for internal/ocsp, container/xmp, internal/testtsa and
+  internal/testocsp, in every module including the core, and with
+  GODEBUG=goindex=0 too. In a fresh clone in %TEMP% it works and all four
+  go.mod files are tidy. build, list, vet and test are unaffected. So: run
+  tidy checks in a clean clone.

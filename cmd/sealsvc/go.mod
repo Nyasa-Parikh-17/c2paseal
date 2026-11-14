@@ -3,9 +3,9 @@ module github.com/Nyasa-Parikh-17/c2paseal/cmd/sealsvc
 go 1.27
 
 require (
-	github.com/Nyasa-Parikh-17/c2paseal v0.0.0-00010101000000-000000000000
-	github.com/Nyasa-Parikh-17/c2paseal/keys/awskms v0.0.0-00010101000000-000000000000
-	github.com/Nyasa-Parikh-17/c2paseal/keys/gcpkms v0.0.0-00010101000000-000000000000
+	github.com/Nyasa-Parikh-17/c2paseal v0.4.0
+	github.com/Nyasa-Parikh-17/c2paseal/keys/awskms v0.4.0
+	github.com/Nyasa-Parikh-17/c2paseal/keys/gcpkms v0.4.0
 )
 
 require (
@@ -65,7 +65,8 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-// Until these modules are tagged (v0.4.0), build against this repository.
+// Builds in this repository use the local copies; users of the module get
+// the versions required above (directory replaces are ignored outside).
 replace (
 	github.com/Nyasa-Parikh-17/c2paseal => ../..
 	github.com/Nyasa-Parikh-17/c2paseal/keys/awskms => ../../keys/awskms

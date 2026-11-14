@@ -3,7 +3,7 @@ module github.com/Nyasa-Parikh-17/c2paseal/keys/awskms
 go 1.27
 
 require (
-	github.com/Nyasa-Parikh-17/c2paseal v0.0.0-00010101000000-000000000000
+	github.com/Nyasa-Parikh-17/c2paseal v0.4.0
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/kms v1.62.6
@@ -29,6 +29,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 )
 
-// Until the core module is tagged with the sign.KeyProvider API (v0.4.0),
-// build against the copy in this repository.
+// Builds in this repository use the local copy; users of the module get
+// the version required above (a directory replace is ignored outside).
 replace github.com/Nyasa-Parikh-17/c2paseal => ../..

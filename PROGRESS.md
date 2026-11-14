@@ -1780,3 +1780,10 @@ ci run 43598198487 passed, all seven jobs. In the `sealsvc` job:
   sign audit records are in the container log.
 
 Phase 25 now waits at gate F: v0.4.0 needs the user's approval.
+
+### Gate F — approved (2026-11-14)
+
+The user approved v0.4.0. The CHANGELOG date is set in the `release v0.4.0`
+commit; the user pushes the tag. After the tag: point keys/awskms,
+keys/gcpkms and cmd/sealsvc at core v0.4.0, drop the `replace` lines, and
+tag the three modules.

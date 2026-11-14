@@ -3,7 +3,7 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
-## Unreleased
+## v0.4.0 — 2026-11-14
 
 ### Added
 - **Keys outside files.** `sign.KeyProvider` and `sign.OpenKey` open

@@ -1,0 +1,10 @@
+# Build context for cmd/sealsvc/Dockerfile: sources only.
+.git
+.github
+dist
+dist-*
+testdata
+interop
+**/*.exe
+**/*.wasm
+**/testdata

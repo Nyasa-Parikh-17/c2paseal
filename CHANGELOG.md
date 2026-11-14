@@ -19,6 +19,17 @@ before v1.0.0 a minor version may change the API.
 - `LoadChain` (a certificate chain without a key) and
   `sign.ParsePrivateKey`.
 
+- **sealsvc**, a self-hosted signing service (`cmd/sealsvc`, its own
+  module):
+  - `POST /v1/sign`, `POST /v1/verify`, `GET /healthz` and `GET /metrics`
+    (Prometheus text format);
+  - hashed API keys with scopes, per-key rate limits, size and concurrency
+    limits, and a JSON audit log;
+  - keys from files, AWS KMS or Google Cloud KMS;
+  - a distroless, non-root container image at
+    `ghcr.io/nyasa-parikh-17/c2paseal/sealsvc` for linux/amd64 and arm64,
+    and a compose example.
+
 ### Changed
 - `c2paseal sign --key` also takes a key URI (`file:…`).
 

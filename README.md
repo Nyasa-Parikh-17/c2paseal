@@ -117,6 +117,18 @@ err = c2paseal.Sign("in.jpg", "out.jpg", &c2paseal.SignOptions{Chain: chain, Sig
   program that imports the provider.
 - There is no PKCS #11: its Go bindings need CGO.
 
+### As a signing service
+
+[sealsvc](cmd/sealsvc) is a small HTTP service around the library:
+
+- `POST /v1/sign` (image in, signed image out) and `POST /v1/verify`;
+- API keys, rate limits, a JSON audit log and Prometheus metrics;
+- signing keys from a file or a KMS.
+
+It ships as a distroless container image,
+`ghcr.io/nyasa-parikh-17/c2paseal/sealsvc`. There is a compose example in
+[deploy/sealsvc](deploy/sealsvc/compose.yaml).
+
 ### In the browser (WebAssembly)
 
 `cmd/c2paseal-wasm` is the same library built for browsers with

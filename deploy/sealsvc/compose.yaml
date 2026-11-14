@@ -1,0 +1,41 @@
+# Example: sealsvc with a signing key in AWS KMS.
+#
+#   1. Put in ./config:
+#        chain.pem      the certificate chain for the KMS key (signer first)
+#        api-keys.txt   lines from `docker run --rm IMAGE hash-key`
+#        trust.pem      trust anchors for /v1/verify (e.g. the C2PA trust list)
+#   2. Set SEALSVC_KEY (an awskms: or gcpkms: URI) and the cloud credentials
+#      in .env or the environment.
+#   3. docker compose up -d, then put a TLS proxy in front of port 8080.
+#
+# To try it without a KMS, mount testdata/pki and use the TEST ONLY key:
+#   SEALSVC_CERT=/config/leaf-chain.pem SEALSVC_KEY=/config/leaf.key
+# (files signed with it prove nothing).
+
+services:
+  sealsvc:
+    image: ghcr.io/nyasa-parikh-17/c2paseal/sealsvc:v0.4.0
+    command: ["--trust", "/config/trust.pem"]
+    environment:
+      SEALSVC_ADDR: ":8080"
+      SEALSVC_CERT: /config/chain.pem
+      SEALSVC_KEY: ${SEALSVC_KEY:?set SEALSVC_KEY, e.g. awskms:arn:aws:kms:…}
+      SEALSVC_API_KEYS: /config/api-keys.txt
+      # AWS KMS: credentials from the environment (or an instance role).
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Google Cloud KMS: mount a service-account key and point to it.
+      # GOOGLE_APPLICATION_CREDENTIALS: /config/gcp.json
+    volumes:
+      - ./config:/config:ro
+    ports:
+      - "127.0.0.1:8080:8080" # publish only to the local TLS proxy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/sealsvc", "healthcheck"]
+      interval: 30s
+      timeout: 5s

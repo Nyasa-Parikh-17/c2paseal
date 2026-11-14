@@ -1645,3 +1645,115 @@ module.
 - The `c2paseal` CLI cannot open KMS keys: it is in the core module, and
   importing the providers would add their SDKs to it. sealsvc (Phase 25)
   will need a way to use them; decide its module layout there.
+
+### Phase 23 and 24 — CI results (2026-11-14)
+
+- v0.3.0: release run 43589471955 passed; published with 7 assets. Phase 23
+  is done.
+- Phase 24: ci run 43589468831 passed, all six jobs. In both `keys` jobs,
+  c2patool 0.27.21 (restored from the interop cache) said Valid/Trusted for
+  the files signed through the fake KMS; TestRealKMS skipped (no secrets).
+  Phase 24 is done.
+
+### Phase 25 — sealsvc signing server (2026-11-14)
+
+The user asked for Phases 25 and 26 together. Phase 25 ends at gate F, so
+Phase 26 waits for approval there.
+
+**Built**
+- `cmd/sealsvc`, its own module: it imports the core module plus
+  keys/awskms and keys/gcpkms (with `replace` until v0.4.0), so it can open
+  KMS keys while the core `go.mod` stays unchanged. This settles the
+  Phase 24 open issue about the module layout.
+- API:
+  - `POST /v1/sign`: raw JPEG/PNG body; answers with the signed file and
+    the `C2paseal-Active-Manifest` and `C2paseal-Manifests` headers. Query
+    parameters: `title`, `source_type`, `no_history`.
+  - `POST /v1/verify`: JSON as `c2paseal verify --json`.
+  - `GET /healthz` and `GET /metrics`, with no key.
+  - Errors are JSON with a `request_id`, which also goes in `X-Request-Id`.
+  - Status codes: 400, 401 (with `WWW-Authenticate`), 403, 413, 415, 422,
+    429 and 503 (both with `Retry-After`), and 502 for key or TSA failures.
+  - Failures are classified by cause, not by message: each request wraps
+    the signer, so a KMS error (502) is told apart from a bad file (422).
+- API keys:
+  - The file has `<name> <sha256> [rate=] [scopes=]` per line. Lookup
+    hashes the bearer token and compares it with every entry in constant
+    time.
+  - `sealsvc hash-key` prints a fresh 32-byte key and its line for the
+    file.
+  - Per-key token bucket (burst = the per-minute rate) and a global
+    concurrency limit (503).
+  - `MaxBytesReader` for the body; header, read, write and idle timeouts;
+    `MaxHeaderBytes`.
+- Audit log: `log/slog` JSON, one record per sign or verify request, plus
+  start and stop records.
+  - Fields: request ID, endpoint, method, path, remote address, status,
+    sizes, duration, API key name, forwarded_for and user agent (both
+    logged only), and for signing the format, the input and output SHA-256,
+    the active manifest and the number of manifests (the validation state
+    for verify).
+  - A test checks that no key, hash or "Bearer" appears in the log.
+  - The start record redacts the key URI's query.
+- Metrics, Prometheus text 0.0.4 written with the standard library:
+  build_info, requests_total{endpoint,code}, a request duration histogram,
+  request/response bytes, signatures_total{key}, rate_limited_total{key},
+  auth_failures_total, busy_total and in_flight_requests. Output order is
+  stable. A test checks every line against the sample grammar.
+- `sealsvc healthcheck` (distroless has no curl) and `version`. Flags have
+  SEALSVC_* environment equivalents. At startup it refuses a key that does
+  not match the certificate. Optional TLS (minimum 1.2).
+- Container:
+  - `cmd/sealsvc/Dockerfile`: multi-stage, `--platform=$BUILDPLATFORM`
+    with cross-compiled GOOS/GOARCH, CGO_ENABLED=0, `-trimpath`, the
+    version through `-X main.version`; final image
+    distroless/static-debian12:nonroot with HEALTHCHECK.
+  - `.dockerignore` keeps the build context to sources.
+  - `deploy/sealsvc/compose.yaml`: read-only, cap_drop ALL,
+    no-new-privileges, port bound to 127.0.0.1, healthcheck.
+- CI:
+  - A new `sealsvc` job: vet, staticcheck and tests (c2patool required).
+    It then builds the image and runs it read-only with `--cap-drop ALL`
+    and the TEST ONLY key: healthz, sign with curl, c2patool says Trusted,
+    verify says Trusted, a request without a key gets 401, `docker exec …
+    healthcheck` works, and the image user is nonroot. The image size goes
+    in the step summary.
+  - Release: the test job also tests the three extra modules. A new `image`
+    job (QEMU, buildx, GHCR login with GITHUB_TOKEN, `packages: write`)
+    pushes linux/amd64 and linux/arm64 tagged `v0.4.0`, `0.4.0` and `0.4`.
+    The docker/* actions run on node24.
+- Refactors for the tests: `signtest.CheckFile` (Check uses it), and the
+  fake AWS KMS moved to an exported `keys/awskms/awskmstest` package that
+  the awskms tests and sealsvc use.
+- Docs: `cmd/sealsvc/README.md` (API, configuration, audit log sample,
+  security notes), a README section, CHANGELOG (Unreleased).
+
+**Results (local)**
+- TestKMSEndToEnd, the phase's check: `run()` starts the real server with
+  an `awskms:` URI pointing at the fake KMS (the certificate is issued for
+  the fake's key) and an audit file. A JPEG and a PNG are signed over HTTP.
+  c2patool says Valid (default) and Trusted (TEST ONLY root) for both, and
+  /v1/verify says Trusted. KMS calls: 1 GetPublicKey, 2 Sign. A clean
+  shutdown writes the stop record.
+- Also tested: auth (401 and 403), size (413), empty body, not an image,
+  bad parameter, 422 for a broken JPEG and for a source type on a signed
+  file, rate limit (429 with Retry-After 31 on a fake clock, other keys
+  unaffected), busy (503), a signer failure (502 with "signing failed", the
+  details only in the log), metrics, the audit log, key file parsing, the
+  token bucket, subcommands and startup configuration errors.
+- gofmt, vet and staticcheck are clean in all four modules, and all suites
+  pass. Coverage: sealsvc 93.3%. The core `go.mod` is unchanged; its direct
+  dependencies are the three allowed.
+- Not checked locally: the Docker image (Docker is not running on this
+  machine). The `sealsvc` CI job builds and runs it on every push.
+
+**Not done here (needs the user)**
+- Push. The `sealsvc` job (tests plus the image) must be green.
+- Gate F: report the API, the security notes and an audit log sample, then
+  ask before tagging v0.4.0. The image is published by the release
+  workflow. At v0.4.0 also: point the key modules and sealsvc at the
+  tagged core module (drop the `replace` lines) and tag
+  `keys/awskms/v0.4.0`, `keys/gcpkms/v0.4.0` and `cmd/sealsvc/v0.4.0` (see
+  the Phase 24 open issue).
+- GHCR packages start private; after the first push the package may need
+  to be made public in the repository's package settings.

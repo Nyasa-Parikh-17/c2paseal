@@ -111,17 +111,8 @@ func Chain(t testing.TB, pub crypto.PublicKey) []*x509.Certificate {
 func Check(t *testing.T, signer crypto.Signer, chain []*x509.Certificate) []string {
 	t.Helper()
 	td := TestdataDir(t)
-	anchorsPath := filepath.Join(td, "pki", "trust-anchors.pem")
-	anchors, err := c2paseal.LoadTrustAnchors(anchorsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if _, ok := signer.Public().(*ecdsa.PublicKey); !ok {
 		t.Fatalf("signtest: signer's public key is %T, want *ecdsa.PublicKey", signer.Public())
-	}
-	c2patool, c2patoolErr := exec.LookPath("c2patool")
-	if c2patoolErr != nil && os.Getenv("C2PASEAL_REQUIRE_C2PATOOL") == "1" {
-		t.Fatalf("signtest: C2PASEAL_REQUIRE_C2PATOOL=1 but c2patool is not on PATH: %v", c2patoolErr)
 	}
 	var out []string
 	for _, name := range []string{"small.jpg", "small.png"} {
@@ -131,27 +122,46 @@ func Check(t *testing.T, signer crypto.Signer, chain []*x509.Certificate) []stri
 			t.Fatalf("%s: sign: %v", name, err)
 		}
 		out = append(out, dst)
-		if st := c2paseal.VerifyFile(dst, nil).State(); st != verify.Valid {
-			t.Errorf("%s: C2paSeal (default trust): %s, want Valid", name, st)
-		}
-		if st := c2paseal.VerifyFile(dst, &c2paseal.VerifyOptions{TrustAnchors: anchors}).State(); st != verify.Trusted {
-			t.Errorf("%s: C2paSeal (TEST ONLY root): %s, want Trusted", name, st)
-		}
-		if c2patoolErr != nil {
-			t.Logf("%s: c2patool not on PATH, skipped", name)
-			continue
-		}
-		def, err := c2patoolState(c2patool, dst)
-		if err != nil || def != verify.Valid {
-			t.Errorf("%s: c2patool (default trust): %s, %v; want Valid", name, def, err)
-		}
-		tr, err := c2patoolState(c2patool, dst, "trust", "--trust_anchors", relSlash(anchorsPath))
-		if err != nil || tr != verify.Trusted {
-			t.Errorf("%s: c2patool (TEST ONLY root): %s, %v; want Trusted", name, tr, err)
-		}
-		t.Logf("%s: c2patool says %s (default trust), %s (TEST ONLY root)", name, def, tr)
+		CheckFile(t, dst)
 	}
 	return out
+}
+
+// CheckFile checks a file signed with a chain from Chain (or the TEST ONLY
+// leaf): Valid with default trust and Trusted under the TEST ONLY root, in
+// this library and, if it is on PATH, in c2patool. As in Check,
+// C2PASEAL_REQUIRE_C2PATOOL=1 makes a missing c2patool a failure.
+func CheckFile(t *testing.T, path string) {
+	t.Helper()
+	name := filepath.Base(path)
+	anchorsPath := filepath.Join(TestdataDir(t), "pki", "trust-anchors.pem")
+	anchors, err := c2paseal.LoadTrustAnchors(anchorsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := c2paseal.VerifyFile(path, nil).State(); st != verify.Valid {
+		t.Errorf("%s: C2paSeal (default trust): %s, want Valid", name, st)
+	}
+	if st := c2paseal.VerifyFile(path, &c2paseal.VerifyOptions{TrustAnchors: anchors}).State(); st != verify.Trusted {
+		t.Errorf("%s: C2paSeal (TEST ONLY root): %s, want Trusted", name, st)
+	}
+	c2patool, err := exec.LookPath("c2patool")
+	if err != nil {
+		if os.Getenv("C2PASEAL_REQUIRE_C2PATOOL") == "1" {
+			t.Fatalf("signtest: C2PASEAL_REQUIRE_C2PATOOL=1 but c2patool is not on PATH: %v", err)
+		}
+		t.Logf("%s: c2patool not on PATH, skipped", name)
+		return
+	}
+	def, err := c2patoolState(c2patool, path)
+	if err != nil || def != verify.Valid {
+		t.Errorf("%s: c2patool (default trust): %s, %v; want Valid", name, def, err)
+	}
+	tr, err := c2patoolState(c2patool, path, "trust", "--trust_anchors", relSlash(anchorsPath))
+	if err != nil || tr != verify.Trusted {
+		t.Errorf("%s: c2patool (TEST ONLY root): %s, %v; want Trusted", name, tr, err)
+	}
+	t.Logf("%s: c2patool says %s (default trust), %s (TEST ONLY root)", name, def, tr)
 }
 
 // c2patoolState runs `c2patool <file> --detailed [extra]` and returns its

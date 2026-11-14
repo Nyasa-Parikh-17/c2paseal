@@ -29,6 +29,12 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2 # 2026.2.2; 2026.2.1 cannot read go1.27.4 export data
           "$(go env GOPATH)/bin/staticcheck" ./...
       - run: go test ./...
+      # The modules with their own go.mod: key providers and sealsvc.
+      - name: Test keys/awskms, keys/gcpkms and cmd/sealsvc
+        run: |
+          for m in keys/awskms keys/gcpkms cmd/sealsvc; do
+            (cd "$m" && go vet ./... && go test ./...)
+          done
 
   build:
     needs: test
@@ -104,3 +110,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag
+
+  # The sealsvc image, for linux/amd64 and linux/arm64, published to GHCR as
+  # ghcr.io/<owner>/c2paseal/sealsvc:<tag> (and <version>, <major.minor>).
+  image:
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}/sealsvc
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: cmd/sealsvc/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ github.ref_name }}

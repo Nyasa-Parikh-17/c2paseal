@@ -1317,3 +1317,14 @@ Commit d75f81a, cloned fresh on each side (0 changed files), go1.27.1,
 Linux build (WSL Ubuntu 24.04, go1.27.1 linux/amd64 from go.dev) give
 identical SHA256SUMS for all six archives (darwin, linux, windows ×
 amd64, arm64). The steps in the release notes' "Checking a release" work.
+
+### Phase 21 — first CI runs after push (2026-11-14)
+
+`ci`, `fuzz` (all 21 targets, 5 min each, by hand) and `interop` all
+passed on GitHub. But interop's Credentio build had failed inside its
+`continue-on-error` step: `ubuntu-latest` is now Ubuntu 26.04 ("resolute"),
+and apt.llvm.org has no LLVM 19 repository for it (`llvm.sh 19` stops at
+`apt-get update`), so the report showed Credentio as not installed. The
+interop job is now pinned to `ubuntu-24.04` (the release the local build
+used), and its cache keys name that image instead of `runner.os`, so a
+c2patool built on 26.04 is not restored there. Rerun pending.

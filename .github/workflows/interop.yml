@@ -19,7 +19,9 @@ env:
 
 jobs:
   interop:
-    runs-on: ubuntu-latest
+    # Pinned: apt.llvm.org has no LLVM 19 packages for Ubuntu 26.04, which
+    # ubuntu-latest became in November 2026, so Credentio cannot build there.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -42,7 +44,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/c2patool
-          key: c2patool-${{ env.C2PATOOL_VERSION }}-${{ runner.os }}
+          key: c2patool-${{ env.C2PATOOL_VERSION }}-ubuntu-24.04
       - name: Install c2patool
         if: steps.c2patool-cache.outputs.cache-hit != 'true'
         run: cargo install c2patool --version "${C2PATOOL_VERSION}" --locked
@@ -55,14 +57,15 @@ jobs:
       #    has no releases, so its c2pa_validate tool is built from the pinned
       #    commit with Clang 19 (libc++) and Bazel, as its README describes.
       #    Its libc++ libraries are cached next to it behind a small wrapper,
-      #    so a cached build runs without LLVM installed. If the build fails, the harness shows Credentio as
-      #    not installed, with the reason; no other tool stands in for it.
+      #    so a cached build runs without LLVM installed. If the build fails, the
+      #    harness shows Credentio as not installed, with the reason; no other
+      #    tool stands in for it.
       - name: Cache Credentio
         id: credentio-cache
         uses: actions/cache@v6
         with:
           path: ~/credentio-bin
-          key: credentio-${{ env.CREDENTIO_COMMIT }}-${{ runner.os }}
+          key: credentio-${{ env.CREDENTIO_COMMIT }}-ubuntu-24.04
       - name: Build Credentio
         if: steps.credentio-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -89,7 +92,7 @@ jobs:
           if [ -x "$bin" ] && "$bin" --asset=testdata/signed/small.jpg > /dev/null; then
             echo "CREDENTIO_VALIDATE=$bin" >> "$GITHUB_ENV"
           else
-            echo "CREDENTIO_BUILD_ERROR=bazel build tools:c2pa_validate failed at commit ${CREDENTIO_COMMIT} on ubuntu-latest (see the Build Credentio step)" >> "$GITHUB_ENV"
+            echo "CREDENTIO_BUILD_ERROR=bazel build tools:c2pa_validate failed at commit ${CREDENTIO_COMMIT} on ubuntu-24.04 (see the Build Credentio step)" >> "$GITHUB_ENV"
           fi
 
       # 4. Regenerate the report. -require fails the job if c2patool or

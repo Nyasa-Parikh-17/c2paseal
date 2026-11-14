@@ -10,9 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
-	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/fixtures"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
 )
@@ -32,18 +31,8 @@ func activeManifest(t *testing.T, f fixtures.Fixture) *manifest.Manifest {
 		if root, err = jumbf.Parse(store); err != nil {
 			t.Fatal(err)
 		}
-	} else if f.Format == "png" {
-		st, err := png.Extract(b)
-		if err != nil {
-			t.Fatal(err)
-		}
-		root = st.Root
-	} else {
-		st, err := jpeg.Extract(b)
-		if err != nil {
-			t.Fatal(err)
-		}
-		root = st.Root
+	} else if _, root, err = asset.Extract(b); err != nil {
+		t.Fatal(err)
 	}
 	ms, err := manifest.DecodeStore(root)
 	if err != nil {

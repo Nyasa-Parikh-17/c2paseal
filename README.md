@@ -1,7 +1,7 @@
 # C2paSeal
 
 A pure-Go **signer and verifier** for [C2PA](https://c2pa.org) Content
-Credentials in **JPEG** and **PNG** files. It builds with `CGO_ENABLED=0`.
+Credentials in **JPEG**, **PNG** and **WebP** files. It builds with `CGO_ENABLED=0`.
 
 ## What it does
 
@@ -18,7 +18,7 @@ It is not the only pure-Go C2PA code: for example
 [`richardwooding/c2pa`](https://pkg.go.dev/github.com/richardwooding/c2pa)
 (used through its `c2pa-mcp` CLI in [INTEROP.md](INTEROP.md)) also validates
 and documents a signing command. C2paSeal's focus is a small, auditable
-signer for JPEG and PNG:
+signer for JPEG, PNG and WebP:
 - **Few dependencies:** three, plus the standard library.
 - **Byte-exact writes:** reserve-and-backfill, with the placeholder-length
   invariant checked in production code.
@@ -166,7 +166,7 @@ that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
 
 | Area | Supported |
 |---|---|
-| Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`) |
+| Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`), WebP (RIFF `C2PA` chunk) |
 | Operations | Read, verify, sign |
 | Signature | Signing: ES256 (ECDSA P-256, SHA-256). Verifying: also ES384, ES512, PS256, PS384, PS512 and Ed25519 |
 | Claims | Writes claim v2; reads claim v2 and C2PA 1.x claim v1 (`c2pa.claim`) |
@@ -185,7 +185,7 @@ that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
   whose private keys are public. Files signed with it prove nothing and show
   `signingCredential.untrusted` unless you pass its root as a trust anchor.
   For real use you need a certificate from a CA on the C2PA trust list.
-- **JPEG and PNG only.** No video, BMFF or other formats.
+- **JPEG, PNG and WebP only.** No video, BMFF or other formats.
 - **Signing is ES256 only.** Verifying also accepts ES384, ES512, PS256,
   PS384, PS512 and Ed25519.
 - **One hard binding:** `c2pa.hash.data`. No soft bindings or watermarks.

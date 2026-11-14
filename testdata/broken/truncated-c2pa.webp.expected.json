@@ -1,0 +1,4 @@
+{
+  "c2patool_error": "Error: asset could not be parsed: RIFF chunk declared size exceeds file size",
+  "exit_code": 1
+}

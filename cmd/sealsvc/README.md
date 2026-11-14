@@ -1,6 +1,6 @@
 # sealsvc
 
-A self-hosted C2PA signing service: send it a JPEG or PNG, get the file
+A self-hosted C2PA signing service: send it a JPEG, PNG or WebP file, get it
 back with Content Credentials signed by your key. The key can be a PEM file
 or a key in AWS KMS or Google Cloud KMS. This is its own Go module, so the
 KMS SDKs are not dependencies of the core C2paSeal module.
@@ -20,8 +20,8 @@ To build from source: `cd cmd/sealsvc && CGO_ENABLED=0 go build`.
 
 | Request | Body | Answer |
 |---|---|---|
-| `POST /v1/sign` | JPEG or PNG | the signed file (`image/jpeg` / `image/png`); headers `C2paseal-Active-Manifest`, `C2paseal-Manifests` |
-| `POST /v1/verify` | JPEG or PNG | JSON, as `c2paseal verify --json` (`validation_results`, `validation_state`) |
+| `POST /v1/sign` | JPEG, PNG or WebP | the signed file (`image/jpeg`, `image/png` or `image/webp`); headers `C2paseal-Active-Manifest`, `C2paseal-Manifests` |
+| `POST /v1/verify` | JPEG, PNG or WebP | JSON, as `c2paseal verify --json` (`validation_results`, `validation_state`) |
 | `GET /healthz` | | `{"status":"ok","version":"…"}` |
 | `GET /metrics` | | Prometheus text format |
 
@@ -38,7 +38,7 @@ To build from source: `cd cmd/sealsvc && CGO_ENABLED=0 go build`.
 | 401 | no or unknown API key |
 | 403 | the key lacks the scope |
 | 413 | body over `--max-bytes` |
-| 415 | not a JPEG or PNG |
+| 415 | not a JPEG, PNG or WebP file |
 | 422 | the file cannot be signed (broken, or options that do not apply to it) |
 | 429 | rate limit (`Retry-After`) |
 | 502 | the key or time-stamp authority failed (details only in the audit log) |

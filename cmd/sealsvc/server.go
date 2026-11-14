@@ -38,8 +38,8 @@ type server struct {
 
 // handler returns the routes:
 //
-//	POST /v1/sign     body: a JPEG or PNG; answer: the signed file
-//	POST /v1/verify   body: a JPEG or PNG; answer: `c2paseal verify --json`
+//	POST /v1/sign     body: a JPEG, PNG or WebP file; answer: the signed file
+//	POST /v1/verify   body: a JPEG, PNG or WebP file; answer: `c2paseal verify --json`
 //	GET  /healthz     liveness, no API key
 //	GET  /metrics     Prometheus text format, no API key
 func (s *server) handler() http.Handler {
@@ -147,7 +147,7 @@ func readBody(c *call, r *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	if len(b) == 0 {
-		return nil, &httpError{code: http.StatusBadRequest, msg: "empty request body: send the JPEG or PNG as the body"}
+		return nil, &httpError{code: http.StatusBadRequest, msg: "empty request body: send the JPEG, PNG or WebP file as the body"}
 	}
 	return b, nil
 }
@@ -163,8 +163,8 @@ func (s *server) sign(c *call, w http.ResponseWriter, r *http.Request) error {
 		return &httpError{code: http.StatusBadRequest, msg: "no_history: " + err.Error()}
 	}
 	format := c2paseal.DetectFormat(b)
-	if format != "jpeg" && format != "png" {
-		return &httpError{code: http.StatusUnsupportedMediaType, msg: "the body is not a JPEG or PNG"}
+	if format != "jpeg" && format != "png" && format != "webp" {
+		return &httpError{code: http.StatusUnsupportedMediaType, msg: "the body is not a JPEG, PNG or WebP file"}
 	}
 	in := sha256.Sum256(b)
 	c.attrs = append(c.attrs, slog.String("format", format), slog.String("input_sha256", hex.EncodeToString(in[:])))
@@ -192,11 +192,7 @@ func (s *server) sign(c *call, w http.ResponseWriter, r *http.Request) error {
 		slog.String("active_manifest", store.Active.Label),
 		slog.Int("manifests", len(store.Manifests)))
 	s.metrics.addKey(s.metrics.signed, c.key.name)
-	ct := "image/jpeg"
-	if format == "png" {
-		ct = "image/png"
-	}
-	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Type", "image/"+format)
 	w.Header().Set("Content-Length", strconv.Itoa(len(signed.File)))
 	w.Header().Set("C2paseal-Active-Manifest", store.Active.Label)
 	w.Header().Set("C2paseal-Manifests", strconv.Itoa(len(store.Manifests)))

@@ -15,9 +15,10 @@ import (
 const (
 	FormatJPEG = asset.JPEG
 	FormatPNG  = asset.PNG
+	FormatWebP = asset.WEBP
 )
 
-// ErrUnsupportedFormat is returned for files that are neither JPEG nor PNG.
+// ErrUnsupportedFormat is returned for files that are not JPEG, PNG or WebP.
 var ErrUnsupportedFormat = asset.ErrUnsupportedFormat
 
 // ErrPrerelease is returned for manifest stores written before C2PA 1.0,
@@ -42,14 +43,14 @@ func decoded(root *jumbf.Box) ([]*manifest.Manifest, error) {
 // not verify anything; hashed-URI results are recorded in each manifest's
 // HashChecks.
 type ManifestStore struct {
-	Format    string // FormatJPEG or FormatPNG
+	Format    string // FormatJPEG, FormatPNG or FormatWebP
 	Root      *jumbf.Box
 	Manifests []*manifest.Manifest // in store order
 	Active    *manifest.Manifest   // the last manifest
 	Sidecar   string               // the sidecar file the store came from; empty if embedded
 }
 
-// Read reads and decodes the manifest store of a JPEG or PNG file: the
+// Read reads and decodes the manifest store of a JPEG, PNG or WebP file: the
 // embedded one, or, if there is none, its sidecar (SidecarPath(path)).
 func Read(path string) (*ManifestStore, error) {
 	b, err := os.ReadFile(path)
@@ -95,6 +96,6 @@ func ReadBytes(b []byte) (*ManifestStore, error) {
 	return &ManifestStore{Format: format, Root: root, Manifests: ms, Active: ms[len(ms)-1]}, nil
 }
 
-// DetectFormat returns FormatJPEG or FormatPNG from a file's leading bytes,
-// or "" if it is neither.
+// DetectFormat returns FormatJPEG, FormatPNG or FormatWebP from a file's
+// leading bytes, or "" if it is none of them.
 func DetectFormat(b []byte) string { return asset.Detect(b) }

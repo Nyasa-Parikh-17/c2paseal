@@ -26,7 +26,7 @@
   // drop dispatches a real drop event carrying the file on the drop zone.
   function drop(ctx, target, name, bytes) {
     const dt = new ctx.win.DataTransfer();
-    dt.items.add(new ctx.win.File([bytes], name, { type: name.endsWith(".png") ? "image/png" : "image/jpeg" }));
+    dt.items.add(new ctx.win.File([bytes], name, { type: name.endsWith(".png") ? "image/png" : name.endsWith(".webp") ? "image/webp" : "image/jpeg" }));
     target.dispatchEvent(new ctx.win.DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
     target.dispatchEvent(new ctx.win.DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
   }

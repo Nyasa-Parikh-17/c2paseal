@@ -46,14 +46,16 @@ var causes = []struct {
 			"With no status from the oracle this is a judgement call, recorded in PROGRESS.md (Phase 9). All three reject the file."},
 	},
 	{
-		// APP11 segment cut short by the end of the file.
+		// Manifest store container (APP11 segment, caBX or C2PA chunk) cut
+		// short by the end of the file.
 		match: func(r *row, m mode) bool {
 			seal, tool, mcp := r.find("C2paSeal", m), r.find("c2patool", m), r.find("c2pa-mcp", m)
 			return failSet(seal, verify.GeneralError) && strings.Contains(tool.Err, "could not be parsed") && (mcp.Skipped || failSet(mcp, verify.ClaimMissing))
 		},
-		cause: cause{"no oracle: three different answers", "`scripts/mkbroken` cut the file in the middle of the first APP11 segment: its length field declares more bytes than remain " +
-			"(container facts give both numbers). The file is no longer a well-formed JPEG. c2patool exits with `Could not parse input JPEG`; c2pa-mcp reports `claim.missing` (`no C2PA manifest found`); " +
-			"C2paSeal's segment walker fails and `Verify` maps that to `general.error`. All three reject the file; the status code differs because there is no oracle status to follow."},
+		cause: cause{"no oracle: three different answers", "`scripts/mkbroken` cut the file in the middle of its manifest store (the first APP11 segment of a JPEG, the `caBX` chunk of a PNG, " +
+			"the `C2PA` chunk of a WebP): its length field declares more bytes than remain (container facts give both numbers), so the file is no longer well formed. " +
+			"c2patool exits with `asset could not be parsed`; c2pa-mcp reports `claim.missing` (`no C2PA manifest found`); " +
+			"C2paSeal's segment or chunk walker fails and `Verify` maps that to `general.error`. All three reject the file; the status code differs because there is no oracle status to follow."},
 	},
 	{
 		// timeStamp.untrusted: failure for c2pa-mcp, informational elsewhere.

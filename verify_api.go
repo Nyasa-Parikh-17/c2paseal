@@ -23,7 +23,7 @@ type VerifyOptions = verify.Options
 // Status is one C2PA validation status (code, URL, explanation).
 type Status = verify.Status
 
-// Verify validates the C2PA manifest store of a JPEG or PNG file and returns
+// Verify validates the C2PA manifest store of a JPEG, PNG or WebP file and returns
 // every status: the active manifest's, then any ingredient deltas. Missing,
 // unreadable and malformed files give failure statuses, never an error.
 func Verify(path string, opts *VerifyOptions) []Status {

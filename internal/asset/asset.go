@@ -10,6 +10,7 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
+	"github.com/Nyasa-Parikh-17/c2paseal/container/webp"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/xmp"
 )
 
@@ -17,6 +18,7 @@ import (
 const (
 	JPEG = "jpeg"
 	PNG  = "png"
+	WEBP = "webp"
 )
 
 // Errors. Container parse errors are returned wrapped as they are.
@@ -33,6 +35,8 @@ func Detect(b []byte) string {
 		return JPEG
 	case bytes.HasPrefix(b, []byte(png.Signature)):
 		return PNG
+	case webp.IsWebP(b):
+		return WEBP
 	}
 	return ""
 }
@@ -52,6 +56,12 @@ func Extract(b []byte) (format string, root *jumbf.Box, err error) {
 		st, err := png.Extract(b)
 		if err != nil {
 			return format, nil, normalize(err, png.ErrNoManifest, png.ErrMultipleStores)
+		}
+		return format, st.Root, nil
+	case WEBP:
+		st, err := webp.Extract(b)
+		if err != nil {
+			return format, nil, normalize(err, webp.ErrNoManifest, webp.ErrMultipleStores)
 		}
 		return format, st.Root, nil
 	}
@@ -78,6 +88,8 @@ func XMP(b []byte) (packet []byte, ok bool, err error) {
 		return p, ok, err
 	case PNG:
 		return png.XMP(b)
+	case WEBP:
+		return webp.XMP(b)
 	}
 	return nil, false, ErrUnsupportedFormat
 }
@@ -90,6 +102,8 @@ func SetXMP(b, packet []byte) ([]byte, error) {
 		return jpeg.SetXMP(b, packet)
 	case PNG:
 		return png.SetXMP(b, packet)
+	case WEBP:
+		return webp.SetXMP(b, packet)
 	}
 	return nil, ErrUnsupportedFormat
 }

@@ -3,6 +3,17 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Added
+- **WebP**: read, verify and sign WebP files (`container/webp`). The store
+  is a top-level RIFF `C2PA` chunk, placed last, as c2pa-rs does. Lossy,
+  lossless and extended (VP8X) files are supported, as are remote manifest
+  references in the XMP chunk. WebP fixtures, negative fixtures, fuzz
+  targets and interop rows were added; c2patool agrees on every WebP file.
+- `c2paseal verify`/`inspect` on folders, the web app and sealsvc accept
+  WebP.
+
 ## v0.4.0 — 2026-11-14
 
 ### Added

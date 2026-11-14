@@ -259,7 +259,7 @@ function render(target, a) {
   panel.append(box);
 
   if (a.signed) {
-    const blob = new Blob([base64ToBytes(a.signed.data)], { type: a.format === "png" ? "image/png" : "image/jpeg" });
+    const blob = new Blob([base64ToBytes(a.signed.data)], { type: "image/" + (a.format || "jpeg") });
     const link = el("a", "download", "Download " + a.signed.name);
     link.href = URL.createObjectURL(blob);
     link.download = a.signed.name;

@@ -12,9 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jumbf"
-	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/cbormode"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/fixtures"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest/assertion"
@@ -32,18 +31,8 @@ func extract(f fixtures.Fixture) (*jumbf.Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.Format == "png" {
-		st, err := png.Extract(b)
-		if err != nil {
-			return nil, err
-		}
-		return st.Root, nil
-	}
-	st, err := jpeg.Extract(b)
-	if err != nil {
-		return nil, err
-	}
-	return st.Root, nil
+	_, root, err := asset.Extract(b)
+	return root, err
 }
 
 // normalize round-trips v through JSON so it compares with oracle output.
@@ -229,7 +218,12 @@ func checkAssertions(t *testing.T, m *Manifest, want map[string]json.RawMessage)
 			if w := fmt.Sprintf("%q", fmt.Sprintf("<omitted> len = %d", len(v.Data))); string(want[a.Label]) != w {
 				t.Errorf("%s: %s: %d bytes, oracle %s", m.Label, a.Label, len(v.Data), want[a.Label])
 			}
-			if v.Format != "image/jpeg" {
+			// c2patool's automatic thumbnails are JPEG, except for WebP
+			// sources, which get a WebP one. (The oracle JSON omits the
+			// format, so this checks the box was read, not c2patool.)
+			switch v.Format {
+			case "image/jpeg", "image/webp":
+			default:
 				t.Errorf("%s: %s format %q", m.Label, a.Label, v.Format)
 			}
 		default:

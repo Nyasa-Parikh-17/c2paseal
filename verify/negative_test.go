@@ -39,6 +39,10 @@ func TestNegativeSet(t *testing.T) {
 		{"wrong hash", "broken/wrong-hash.jpg", AssertionDataHashMismatch, false},
 		{"wrong hash", "broken/wrong-hash.png", AssertionDataHashMismatch, false},
 		{"revoked certificate", "ocsp/revoked.jpg", SigningCredentialRevoked, true},
+		{"tampered pixels", "broken/data-flip.webp", AssertionDataHashMismatch, false},
+		{"bad signature", "broken/sig-flip.webp", ClaimSignatureMismatch, false},
+		{"truncated manifest", "broken/truncated-c2pa.webp", "", true},
+		{"wrong hash", "broken/wrong-hash.webp", AssertionDataHashMismatch, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.defect+"/"+tt.file, func(t *testing.T) {

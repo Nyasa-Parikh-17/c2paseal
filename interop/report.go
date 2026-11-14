@@ -15,6 +15,7 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
+	"github.com/Nyasa-Parikh-17/c2paseal/container/webp"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/ocsp"
 	"github.com/Nyasa-Parikh-17/c2paseal/manifest"
@@ -317,6 +318,14 @@ func containerFacts(b []byte) []string {
 		}
 		storeStart, storeEnd = st.Chunk.Offset, st.Chunk.End()
 		add("manifest store: %d bytes in a caBX chunk at file bytes [%d, %d), CRC valid: %v", len(st.JUMBF), storeStart, storeEnd, st.Chunk.CRCValid)
+	case asset.WEBP:
+		st, err := webp.Extract(b)
+		if err != nil {
+			add("WebP manifest store: %v", err)
+			return facts
+		}
+		storeStart, storeEnd = st.Chunk.Offset, st.Chunk.End()
+		add("manifest store: %d bytes in a C2PA chunk at file bytes [%d, %d)", len(st.JUMBF), storeStart, storeEnd)
 	default:
 		return facts
 	}

@@ -138,13 +138,13 @@ func errorOf(t *testing.T, b []byte) string {
 
 func TestSignAndVerify(t *testing.T) {
 	s := newTestServer(t, nil, nil)
-	for _, name := range []string{"small.jpg", "small.png"} {
+	for _, name := range []string{"small.jpg", "small.png", "small.webp"} {
 		t.Run(name, func(t *testing.T) {
 			resp, signed := post(t, s.url, "/v1/sign?title=served", keyAll, read(t, "unsigned/"+name))
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("sign: %s: %s", resp.Status, signed)
 			}
-			wantCT := map[string]string{"small.jpg": "image/jpeg", "small.png": "image/png"}[name]
+			wantCT := map[string]string{"small.jpg": "image/jpeg", "small.png": "image/png", "small.webp": "image/webp"}[name]
 			if resp.Header.Get("Content-Type") != wantCT || !strings.HasPrefix(resp.Header.Get("C2paseal-Active-Manifest"), "urn:c2pa:") ||
 				resp.Header.Get("C2paseal-Manifests") != "1" || len(resp.Header.Get("X-Request-Id")) != 24 {
 				t.Errorf("headers: %v", resp.Header)
@@ -257,7 +257,7 @@ func TestAuthAndLimits(t *testing.T) {
 		{"verify-only key signs", "/v1/sign", keyVerify, img, 403, "may not sign"},
 		{"too large", "/v1/verify", keyAll, make([]byte, 65<<10), 413, "request body over 65536 bytes"},
 		{"empty", "/v1/sign", keyAll, nil, 400, "empty request body"},
-		{"not an image", "/v1/sign", keyAll, []byte("hello"), 415, "not a JPEG or PNG"},
+		{"not an image", "/v1/sign", keyAll, []byte("hello"), 415, "not a JPEG, PNG or WebP file"},
 		{"bad no_history", "/v1/sign?no_history=maybe", keyAll, img, 400, "no_history"},
 		{"source type on a signed file", "/v1/sign?source_type=x", keyAll, read(t, "signed/small.jpg"), 422, ""},
 		{"broken JPEG", "/v1/sign", keyAll, read(t, "broken/truncated-app11.jpg"), 422, ""},

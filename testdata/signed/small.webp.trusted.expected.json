@@ -1,0 +1,158 @@
+{
+  "active_manifest": "urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4",
+  "manifests": {
+    "urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4": {
+      "claim": {
+        "instanceID": "xmp:iid:a3742dbe-5af7-4149-aa5f-cd74961ec53a",
+        "claim_generator_info": {
+          "name": "c2paseal-fixtures",
+          "version": "1.0",
+          "org.contentauth.c2pa_rs": "0.90.21"
+        },
+        "signature": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.signature",
+        "created_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.hash.data",
+            "hash": "cU7IYzQlMZ/2yzXtLltpj9bnccSWQVNtSd/BDlpSj70="
+          }
+        ],
+        "gathered_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.claim",
+            "hash": "KVc8Ieia8OIjnI57DpZUwQ+n6udvoBSCvJbsLJ2N5lU="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient",
+            "hash": "NtbiQqw2aOTs2jV7z8L1jI3UsHZohYzJui08O0RB2Tk="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.ingredient.v3",
+            "hash": "GJ+7VqYkVrzPP8L/WSf2isKGbYIaJ2K2WX5f2Zokl74="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.actions.v2",
+            "hash": "j35puXMSYJEvrppbo20YyE7+guW1mU6SFG0XgCQsOOs="
+          }
+        ],
+        "dc:title": "small.webp",
+        "alg": "sha256",
+        "claim_version": 2
+      },
+      "assertion_store": {
+        "c2pa.thumbnail.claim": "<omitted> len = 1888",
+        "c2pa.actions.v2": {
+          "actions": [
+            {
+              "action": "c2pa.opened",
+              "parameters": {
+                "ingredients": [
+                  {
+                    "url": "self#jumbf=c2pa.assertions/c2pa.ingredient.v3",
+                    "hash": "GJ+7VqYkVrzPP8L/WSf2isKGbYIaJ2K2WX5f2Zokl74="
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "c2pa.ingredient.v3": {
+          "relationship": "parentOf",
+          "dc:format": "image/webp",
+          "instanceID": "xmp:iid:0beb140c-ac59-497f-b4a4-a0b4dd69307c",
+          "thumbnail": {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient",
+            "hash": "NtbiQqw2aOTs2jV7z8L1jI3UsHZohYzJui08O0RB2Tk="
+          }
+        },
+        "c2pa.thumbnail.ingredient": "<omitted> len = 1888",
+        "c2pa.hash.data": {
+          "exclusions": [
+            {
+              "start": 86,
+              "length": 17875
+            }
+          ],
+          "name": "jumbf manifest",
+          "alg": "sha256",
+          "hash": "y7VR0qrAFCUpIIEKmFc8gY+aNaPamY9Ifu5zwYCw++4=",
+          "pad": "AAAAAAAAAAA="
+        }
+      },
+      "signature": {
+        "alg": "es256",
+        "issuer": "C2paSeal TEST ONLY",
+        "common_name": "C2paSeal Test Signer"
+      }
+    }
+  },
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "signingCredential.trusted",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.signature",
+          "explanation": "signing certificate trusted, found in System trust anchors"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.thumbnail.claim",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.thumbnail.ingredient",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.ingredient.v3",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.ingredient.v3"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.actions.v2",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions.v2"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [],
+      "failure": []
+    },
+    "ingredientDeltas": [
+      {
+        "ingredientAssertionURI": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.ingredient.v3",
+        "validationDeltas": {
+          "success": [],
+          "informational": [
+            {
+              "code": "ingredient.unknownProvenance",
+              "url": "self#jumbf=/c2pa/urn:c2pa:740b985a-b79e-4688-8dfc-745546ad1bf4/c2pa.assertions/c2pa.ingredient.v3",
+              "explanation": "no title: ingredient does not have provenance"
+            }
+          ],
+          "failure": []
+        }
+      }
+    ]
+  },
+  "validation_state": "Trusted"
+}

@@ -1,0 +1,170 @@
+{
+  "active_manifest": "urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2",
+  "manifests": {
+    "urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2": {
+      "claim": {
+        "instanceID": "xmp:iid:a21582e5-10cc-4ca0-80a9-906c46c46134",
+        "claim_generator_info": {
+          "name": "c2paseal-fixtures",
+          "version": "1.0",
+          "org.contentauth.c2pa_rs": "0.90.21"
+        },
+        "signature": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+        "created_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.hash.data",
+            "hash": "IDwcrKEVFOY/h+ba77LbtLmvDiqyRxaZ5w1awwv2ZdE="
+          }
+        ],
+        "gathered_assertions": [
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.claim",
+            "hash": "w8yvBpj5KusxX9epe5XNCv5eZEhY+El3XdSsuDRHZCI="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient",
+            "hash": "nLkDUcVYSa3EpsxReGeODvaMLSPI/UZTzdllKhlaxV4="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.ingredient.v3",
+            "hash": "SLNLgvpViorPRf4HrlqMQOoS2Ws11Jno1B7wpMJShrc="
+          },
+          {
+            "url": "self#jumbf=c2pa.assertions/c2pa.actions.v2",
+            "hash": "G8fu2KO9qfbiYjHrjRClxosxPzaAZkvj2JVCnWHngCw="
+          }
+        ],
+        "dc:title": "ts.webp",
+        "alg": "sha256",
+        "claim_version": 2
+      },
+      "assertion_store": {
+        "c2pa.thumbnail.ingredient": "<omitted> len = 1888",
+        "c2pa.thumbnail.claim": "<omitted> len = 1888",
+        "c2pa.actions.v2": {
+          "actions": [
+            {
+              "action": "c2pa.opened",
+              "parameters": {
+                "ingredients": [
+                  {
+                    "url": "self#jumbf=c2pa.assertions/c2pa.ingredient.v3",
+                    "hash": "SLNLgvpViorPRf4HrlqMQOoS2Ws11Jno1B7wpMJShrc="
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "c2pa.hash.data": {
+          "exclusions": [
+            {
+              "start": 86,
+              "length": 17872
+            }
+          ],
+          "name": "jumbf manifest",
+          "alg": "sha256",
+          "hash": "UlLq79pjtdOmEtq+90jTD/w6KzmoBU9aY0O68ODPSsI=",
+          "pad": "AAAAAAAAAAA="
+        },
+        "c2pa.ingredient.v3": {
+          "relationship": "parentOf",
+          "dc:format": "image/webp",
+          "instanceID": "xmp:iid:541cf01a-9161-4e51-b120-5b701e935f9d",
+          "thumbnail": {
+            "url": "self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient",
+            "hash": "nLkDUcVYSa3EpsxReGeODvaMLSPI/UZTzdllKhlaxV4="
+          }
+        }
+      },
+      "signature": {
+        "alg": "es256",
+        "issuer": "C2paSeal TEST ONLY",
+        "common_name": "C2paSeal Test Signer",
+        "time": "2026-11-14T14:07:19+00:00"
+      }
+    }
+  },
+  "validation_results": {
+    "activeManifest": {
+      "success": [
+        {
+          "code": "timeStamp.validated",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+          "explanation": "timestamp message digest matched: DigiCert SHA256 RSA4096 Timestamp Responder 2026 1"
+        },
+        {
+          "code": "signingCredential.trusted",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+          "explanation": "signing certificate trusted, found in System trust anchors"
+        },
+        {
+          "code": "claimSignature.insideValidity",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "claimSignature.validated",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+          "explanation": "claim signature valid"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.hash.data",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.hash.data"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.thumbnail.claim",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.claim"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.thumbnail.ingredient",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.thumbnail.ingredient"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.ingredient.v3",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.ingredient.v3"
+        },
+        {
+          "code": "assertion.hashedURI.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.actions.v2",
+          "explanation": "hashed uri matched: self#jumbf=c2pa.assertions/c2pa.actions.v2"
+        },
+        {
+          "code": "assertion.dataHash.match",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.hash.data",
+          "explanation": "data hash valid"
+        }
+      ],
+      "informational": [
+        {
+          "code": "timeStamp.untrusted",
+          "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.signature",
+          "explanation": "timestamp cert untrusted: DigiCert SHA256 RSA4096 Timestamp Responder 2026 1"
+        }
+      ],
+      "failure": []
+    },
+    "ingredientDeltas": [
+      {
+        "ingredientAssertionURI": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.ingredient.v3",
+        "validationDeltas": {
+          "success": [],
+          "informational": [
+            {
+              "code": "ingredient.unknownProvenance",
+              "url": "self#jumbf=/c2pa/urn:c2pa:00e5b840-d8ef-4a64-a01f-66d06c2ac6b2/c2pa.assertions/c2pa.ingredient.v3",
+              "explanation": "no title: ingredient does not have provenance"
+            }
+          ],
+          "failure": []
+        }
+      }
+    ]
+  },
+  "validation_state": "Trusted"
+}

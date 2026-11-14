@@ -84,13 +84,13 @@ var credentioCauses = []struct {
 	{
 		// Broken containers: no oracle status.
 		match: func(r *row, m mode, seal, cr outcome, f fileFacts) bool {
-			return (failSet(seal, verify.GeneralError) && (strings.Contains(cr.Err, "truncated JPEG box") || strings.Contains(cr.Err, "PNG chunk extends beyond the end"))) ||
+			return (failSet(seal, verify.GeneralError) && (strings.Contains(cr.Err, "truncated JPEG box") || strings.Contains(cr.Err, "PNG chunk extends beyond the end") || strings.Contains(cr.Err, "RIFF chunk extends beyond the end"))) ||
 				(failSet(seal, verify.ClaimMalformed) && strings.Contains(cr.Err, "could not parse content box"))
 		},
 		cause: cause{"no oracle: Credentio reports an error instead of a status",
 			"The container or the JUMBF structure is broken by `scripts/mkbroken` (a segment or chunk cut off by the end of the file, or a box length past the end of the store; " +
 				"container facts give the numbers). c2patool also exits with an error here, so there is no oracle status. " +
-				"Credentio exits with a parse error (`truncated JPEG box`, `PNG chunk extends beyond the end of the file`, `could not parse content box`); " +
+				"Credentio exits with a parse error (`truncated JPEG box`, `PNG chunk extends beyond the end of the file`, `RIFF chunk extends beyond the end of the file`, `could not parse content box`); " +
 				"C2paSeal reports `general.error` or `claim.malformed`. Every tool rejects the file."},
 	},
 	{

@@ -49,7 +49,7 @@ func batchMode(paths []string) bool {
 // isImage reports whether a file name has an extension c2paseal reads.
 func isImage(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg", ".png":
+	case ".jpg", ".jpeg", ".png", ".webp":
 		return true
 	}
 	return false

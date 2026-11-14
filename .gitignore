@@ -1,6 +1,7 @@
 # Binaries
 /c2paseal
 /c2paseal.exe
+/cmd/sealsvc/sealsvc
 *.exe
 /dist/
 

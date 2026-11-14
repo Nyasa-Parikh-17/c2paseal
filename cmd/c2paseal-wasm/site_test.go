@@ -62,6 +62,8 @@ var siteCases = []siteCase{
 	{Name: "expired signer", File: "broken/expired.jpg", Trust: true, state: "invalid", title: "Content Credentials not valid", manifests: 1},
 	{Name: "no credentials", File: "unsigned/small.png", state: "none", title: "No Content Credentials", text: []string{"not a sign of tampering"}},
 	{Name: "edit history", File: "legacy/CACA.jpg", manifests: 2},
+	{Name: "WebP, trusted", File: "signed/alpha.webp", Trust: true, state: "valid", title: "Valid, trusted signer", text: []string{"Signed by C2paSeal Test Signer"}, manifests: 1},
+	{Name: "tampered WebP", File: "broken/data-flip.webp", Trust: true, state: "invalid", title: "Changed since it was signed", manifests: 1},
 }
 
 // TestSite runs the web app in headless Chrome as a person would: drop

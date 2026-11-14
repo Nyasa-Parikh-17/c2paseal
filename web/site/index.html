@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
-<meta name="description" content="Check and add C2PA Content Credentials in JPEG and PNG files. Files stay in your browser.">
+<meta name="description" content="Check and add C2PA Content Credentials in JPEG, PNG and WebP files. Files stay in your browser.">
 <title>C2paSeal</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
@@ -14,7 +14,7 @@
 <main>
   <header>
     <h1>C2paSeal</h1>
-    <p class="lead">Read and validate C2PA Content Credentials in JPEG and PNG files, or sign a sample with a demo certificate.</p>
+    <p class="lead">Read and validate C2PA Content Credentials in JPEG, PNG and WebP files, or sign a sample with a demo certificate.</p>
     <p class="where" id="where" aria-live="polite">Loading the validator…</p>
   </header>
 
@@ -25,8 +25,8 @@
 
   <section id="pane-verify" role="tabpanel" aria-labelledby="tab-verify">
     <label class="drop" id="drop">
-      <input type="file" id="file" accept="image/jpeg,image/png" disabled>
-      <strong>Drop a JPEG or PNG here</strong> or click to choose one
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" disabled>
+      <strong>Drop a JPEG, PNG or WebP file here</strong> or click to choose one
     </label>
     <div class="controls">
       <label><input type="checkbox" id="trust"> Also trust the TEST ONLY demo root</label>
@@ -43,10 +43,10 @@
     <div class="sample">
       <img src="demo/sample.jpg" alt="The sample image: an unsigned JPEG" width="160">
       <div>
-        <p>Sign the sample image (an unsigned test picture), or choose one of your own JPEG or PNG files.</p>
+        <p>Sign the sample image (an unsigned test picture), or choose one of your own JPEG, PNG or WebP files.</p>
         <div class="controls">
           <button id="sign-sample" disabled>Sign the sample</button>
-          <label class="pick">or sign your own: <input type="file" id="sign-file" accept="image/jpeg,image/png" disabled></label>
+          <label class="pick">or sign your own: <input type="file" id="sign-file" accept="image/jpeg,image/png,image/webp" disabled></label>
         </div>
         <div class="controls">
           <label><input type="checkbox" id="sign-trust"> Trust the demo root when checking the result</label>

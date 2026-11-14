@@ -34,6 +34,10 @@ var variants = []variant{
 	{"wrong-hash.png", "small.png", pngFixCRC(wrongHash)},
 	{"sig-flip.png", "small.png", pngFixCRC(flipSignature)},
 	{"truncated-cabx.png", "small.png", truncateCaBX},
+	{"data-flip.webp", "small.webp", flipWebPImage},
+	{"sig-flip.webp", "small.webp", flipSignature},
+	{"wrong-hash.webp", "small.webp", wrongHash},
+	{"truncated-c2pa.webp", "small.webp", truncateWebPC2PA},
 }
 
 func main() {
@@ -232,4 +236,38 @@ func truncateCaBX(b []byte) ([]byte, error) {
 		i += 12 + n
 	}
 	return nil, errors.New("no caBX chunk")
+}
+
+// webpChunk returns the offset and data length of the first top-level RIFF
+// chunk with the FourCC.
+func webpChunk(b []byte, fourCC string) (off, n int, err error) {
+	for i := 12; i+8 <= len(b); {
+		n := int(binary.LittleEndian.Uint32(b[i+4:]))
+		if string(b[i:i+4]) == fourCC {
+			return i, n, nil
+		}
+		i += 8 + n + n&1
+	}
+	return 0, 0, fmt.Errorf("no %q chunk", fourCC)
+}
+
+// flipWebPImage flips one bit in the middle of the VP8L image data. RIFF
+// has no checksums, so only the hard binding is broken.
+func flipWebPImage(b []byte) ([]byte, error) {
+	off, n, err := webpChunk(b, "VP8L")
+	if err != nil {
+		return nil, err
+	}
+	b[off+8+n/2] ^= 0x01
+	return b, nil
+}
+
+// truncateWebPC2PA cuts the file in the middle of the C2PA chunk, leaving
+// the RIFF size as it was.
+func truncateWebPC2PA(b []byte) ([]byte, error) {
+	off, n, err := webpChunk(b, "C2PA")
+	if err != nil {
+		return nil, err
+	}
+	return b[:off+8+n/2], nil
 }

@@ -8,17 +8,20 @@
 // {"c2patool_error": "<stderr>", "exit_code": N} instead. Output is never
 // edited afterwards.
 //
-// Usage: go run ./scripts/oracle <testdata-dir> [subdir...]
+// Usage: go run ./scripts/oracle [-only <glob>] <testdata-dir> [subdir...]
 //
 // With subdirectories named, only those are regenerated (for example
 // "remote", whose remote-only files need scripts/make-remote-fixtures.sh's
-// local server running).
+// local server running). With -only, only files whose name matches the
+// glob (for example '*.webp'), so adding fixtures leaves the existing
+// oracle output alone.
 package main
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,15 +31,22 @@ import (
 
 var dirs = []string{"unsigned", "signed", "broken", "samples", "remote", "legacy", "ocsp"}
 
+var only = flag.String("only", "*", "regenerate only files whose name matches this glob")
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: oracle <testdata-dir> [subdir...]")
+	flag.Parse()
+	if flag.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: oracle [-only <glob>] <testdata-dir> [subdir...]")
 		os.Exit(2)
 	}
-	if len(os.Args) > 2 {
-		dirs = os.Args[2:]
+	if flag.NArg() > 1 {
+		dirs = flag.Args()[1:]
 	}
-	if err := run(os.Args[1]); err != nil {
+	if _, err := filepath.Match(*only, ""); err != nil {
+		fmt.Fprintln(os.Stderr, "oracle: -only:", err)
+		os.Exit(2)
+	}
+	if err := run(flag.Arg(0)); err != nil {
 		fmt.Fprintln(os.Stderr, "oracle:", err)
 		os.Exit(1)
 	}
@@ -51,7 +61,7 @@ func run(root string) error {
 			return err
 		}
 		for _, f := range files {
-			if !isImage(f) {
+			if ok, _ := filepath.Match(*only, filepath.Base(f)); !ok || !isImage(f) {
 				continue
 			}
 			if err := write(f+".expected.json", f); err != nil {
@@ -68,7 +78,7 @@ func run(root string) error {
 
 func isImage(f string) bool {
 	switch strings.ToLower(filepath.Ext(f)) {
-	case ".jpg", ".jpeg", ".png":
+	case ".jpg", ".jpeg", ".png", ".webp":
 		return true
 	}
 	return false

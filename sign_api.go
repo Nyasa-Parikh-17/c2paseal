@@ -25,7 +25,7 @@ var ErrSignFormat = sign.ErrFormat
 // store.
 type SignedAsset = sign.Signed
 
-// Sign reads the JPEG or PNG at in, signs it and writes the result to out
+// Sign reads the JPEG, PNG or WebP file at in, signs it and writes the result to out
 // (atomically, via a temporary file in out's directory).
 //
 // If in already has a manifest store, it is kept and recorded as the
@@ -63,7 +63,7 @@ func SignBytes(b []byte, opts *SignOptions) ([]byte, error) {
 	return s.File, nil
 }
 
-// SignAsset signs a JPEG or PNG held in memory and returns the signed file
+// SignAsset signs a JPEG, PNG or WebP file held in memory and returns the signed file
 // and its manifest store (embedded in the file, or, with
 // SignOptions.Sidecar, to be saved as a sidecar or served at
 // SignOptions.RemoteURL).

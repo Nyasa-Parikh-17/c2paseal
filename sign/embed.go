@@ -8,6 +8,7 @@ import (
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/png"
+	"github.com/Nyasa-Parikh-17/c2paseal/container/webp"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 )
 
@@ -25,13 +26,13 @@ type Signed struct {
 }
 
 // ErrFormat is returned by Asset for a file that is neither JPEG nor PNG.
-var ErrFormat = errors.New("sign: signing supports JPEG and PNG only")
+var ErrFormat = errors.New("sign: signing supports JPEG, PNG and WebP only")
 
 // ErrSidecar is returned by JPEG and PNG when Options.Sidecar is set: they
 // return only the file, so the store would be lost. Use Asset.
 var ErrSidecar = errors.New("sign: Options.Sidecar needs Asset, which returns the manifest store")
 
-// Asset signs a JPEG or PNG and returns the signed file and its manifest
+// Asset signs a JPEG, PNG or WebP file and returns the signed file and its manifest
 // store. in is not modified. See embed for the steps.
 //
 // If in already has a manifest store, its manifests are kept, unchanged,
@@ -45,6 +46,8 @@ func Asset(in []byte, opts *Options) (*Signed, error) {
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &jpegContainer{})
 	case asset.PNG:
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &pngContainer{})
+	case asset.WEBP:
+		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &webpContainer{})
 	}
 	return nil, ErrFormat
 }
@@ -325,6 +328,41 @@ func (p *pngContainer) extract(file []byte) ([]byte, error) {
 		}
 	}
 	st, err := png.Extract(file)
+	if err != nil {
+		return nil, err
+	}
+	return st.JUMBF, nil
+}
+
+// webpContainer embeds the store in a C2PA chunk at the end of the RIFF.
+// The hard-binding exclusion is the chunk header and data, not its pad
+// byte, as c2pa-rs excludes it.
+type webpContainer struct {
+	chunk webp.Chunk
+}
+
+func (w *webpContainer) strip(in []byte) ([]byte, error) { return webp.Strip(in) }
+
+func (w *webpContainer) insert(stripped, store []byte, _ int) ([]byte, int, int, error) {
+	file, c, err := webp.Insert(stripped, store)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if c.Length != len(store) || c.End() > len(file) {
+		return nil, 0, 0, errors.New("C2PA chunk does not have the expected size")
+	}
+	w.chunk = c
+	return file, c.Offset, c.ExclusionLength(), nil
+}
+
+func (w *webpContainer) write(file []byte, off int, data []byte) error {
+	return webp.WriteStore(file, w.chunk, off, data)
+}
+
+func (w *webpContainer) finish([]byte) error { return nil }
+
+func (w *webpContainer) extract(file []byte) ([]byte, error) {
+	st, err := webp.Extract(file)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ func FuzzSign(f *testing.F) {
 	for _, k := range []fixtures.Kind{fixtures.Unsigned, fixtures.Signed} {
 		fs, _ := fixtures.ListKind(k)
 		for _, fx := range fs {
-			if fx.Format == "jpeg" || fx.Format == "png" {
+			if fx.Format == "jpeg" || fx.Format == "png" || fx.Format == "webp" {
 				if b, err := os.ReadFile(fx.Path); err == nil && len(b) < 64<<10 {
 					f.Add(b)
 				}

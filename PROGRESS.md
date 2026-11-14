@@ -1523,3 +1523,21 @@ passed 13/13 in Chrome 157 on Linux. Phase 22 is done. The release run
   list file, such as the official C2PA list, is in Future work. Without it,
   files from real cameras show "Signer not on your trust list".
 - Whether Pages compresses `.wasm` will be known after the first deploy.
+
+### Phase 23 — first deploy (2026-11-14)
+
+- The user turned on Pages (source: GitHub Actions) and pushed c1efc22.
+  `pages` run 43585541679 passed: the site is live at
+  https://nyasa-parikh-17.github.io/c2paseal/ (sw.js VERSION
+  `c1efc22ca14d`).
+- Pages gzips everything: c2paseal.wasm is sent as `application/wasm`,
+  3,869,555 bytes on the wire.
+- Live check (the scratchpad DevTools script, pointed at the Pages URL):
+  - All states as expected; sign, and sign again, work.
+  - The service worker controls the page. With Chrome's network emulation
+    set to offline, a reload loads the app and verifies a file.
+  - No console errors.
+- ci run 43585541708 failed on windows-latest only: TestPageAndErrors got
+  `application/javascript` for .js. net/http takes types from the Windows
+  registry. The site's file types are now fixed in `web.siteTypes`, so
+  serve sends the same types on every OS; the test was not loosened.

@@ -18,6 +18,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"path"
 	"path/filepath"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
@@ -37,6 +38,19 @@ func Site() fs.FS {
 		panic(err) // the embedded directory is always there
 	}
 	return sub
+}
+
+// siteTypes fixes the Content-Type of the site's files. Without it,
+// net/http takes types from the operating system, which differ (Windows
+// can map .js to application/javascript).
+var siteTypes = map[string]string{
+	".html": "text/html; charset=utf-8",
+	".js":   "text/javascript; charset=utf-8",
+	".css":  "text/css; charset=utf-8",
+	".svg":  "image/svg+xml",
+	".jpg":  "image/jpeg",
+	".pem":  "text/plain; charset=utf-8",
+	".key":  "text/plain; charset=utf-8",
 }
 
 // ContentSecurityPolicy is sent with every page and also set in
@@ -94,6 +108,9 @@ func Handler(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", ContentSecurityPolicy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if ct, ok := siteTypes[path.Ext(r.URL.Path)]; ok {
+			w.Header().Set("Content-Type", ct)
+		}
 		static.ServeHTTP(w, r)
 	})
 	mux.HandleFunc("POST /api/verify", func(w http.ResponseWriter, r *http.Request) {

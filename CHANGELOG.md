@@ -3,6 +3,16 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Added
+- **WebAssembly build** (`cmd/c2paseal-wasm`): verify and sign in the
+  browser through `globalThis.c2paseal.verify` / `.sign`, returning the
+  CLI's JSON. CI holds the gzipped `.wasm` to a 4 MiB budget and runs it in
+  headless Chrome on JPEG and PNG files.
+- `ParseSigner`, `ParseTrustAnchors`, `ParseAllowedList` and
+  `ParseTrustConfig`: the `Load*` functions on bytes instead of paths.
+
 ## v0.2.0 — 2026-11-14
 
 ### Added

@@ -113,6 +113,12 @@ func parseTrustAnchors(b []byte, name string) ([]*x509.Certificate, error) {
 // checked against the same anchors, as in c2pa-rs.
 func LoadTrustList(path string) ([]*x509.Certificate, error) { return LoadTrustAnchors(path) }
 
+// ParseTrustAnchors is LoadTrustAnchors (and LoadTrustList) on the PEM
+// bytes, for callers without files (such as the WebAssembly build).
+func ParseTrustAnchors(b []byte) ([]*x509.Certificate, error) {
+	return parseTrustAnchors(b, "the input")
+}
+
 // LoadAllowedList reads an allowed list for VerifyOptions.AllowedList, in
 // c2pa-rs's format: PEM certificates, and lines outside PEM blocks that are
 // the base64 SHA-256 of a certificate's DER (44 characters). Other lines are
@@ -123,6 +129,11 @@ func LoadAllowedList(path string) ([][sha256.Size]byte, error) {
 		return nil, fmt.Errorf("c2paseal: allowed list: %w", err)
 	}
 	return parseAllowedList(b, path)
+}
+
+// ParseAllowedList is LoadAllowedList on the file's bytes.
+func ParseAllowedList(b []byte) ([][sha256.Size]byte, error) {
+	return parseAllowedList(b, "the input")
 }
 
 // parseAllowedList is LoadAllowedList on the file's bytes; name is used in
@@ -164,6 +175,9 @@ func LoadTrustConfig(path string) ([]asn1.ObjectIdentifier, error) {
 	}
 	return parseTrustConfig(b), nil
 }
+
+// ParseTrustConfig is LoadTrustConfig on the file's bytes.
+func ParseTrustConfig(b []byte) []asn1.ObjectIdentifier { return parseTrustConfig(b) }
 
 // parseTrustConfig is LoadTrustConfig on the file's bytes.
 func parseTrustConfig(b []byte) []asn1.ObjectIdentifier {

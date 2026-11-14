@@ -89,6 +89,33 @@ fmt.Println(result.State()) // Invalid, Valid or Trusted
 Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
 (also `Read`, `Verify`, `VerifyFile`), or the package page on pkg.go.dev.
 
+### In the browser (WebAssembly)
+
+`cmd/c2paseal-wasm` is the same library built for browsers with
+`GOOS=js GOARCH=wasm` (about 3.7 MB gzipped; CI keeps it under 4 MiB). It
+defines `globalThis.c2paseal` with `verify(bytes, opts)` and
+`sign(bytes, opts)`, which return JSON in the shape of the CLI's
+`verify --json` and `sign --json`:
+
+```sh
+GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm ./cmd/c2paseal-wasm
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" .
+```
+
+```js
+const go = new Go(); // from wasm_exec.js
+const { instance } = await WebAssembly.instantiateStreaming(fetch("c2paseal.wasm"), go.importObject);
+go.run(instance);
+const result = JSON.parse(c2paseal.verify(bytes, { trustAnchors: pemText }));
+console.log(result.validation_state); // Invalid, Valid or Trusted
+```
+
+Files stay in the page; the browser build makes no network requests, so it
+has no time-stamping, remote manifests or online OCSP. The options are in
+`go doc ./cmd/c2paseal-wasm`. `ParseSigner`, `ParseTrustAnchors`,
+`ParseAllowedList` and `ParseTrustConfig` are the byte-level versions of the
+`Load*` functions, for code without files.
+
 ## Scope
 
 | Area | Supported |

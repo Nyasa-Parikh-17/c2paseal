@@ -35,3 +35,39 @@ jobs:
           "$(go env GOPATH)/bin/staticcheck" ./...
       - name: Test
         run: go test ./...
+
+  # The WebAssembly build (cmd/c2paseal-wasm): built once with the release
+  # flags, held to its size budget and run in headless Chrome, which the
+  # Ubuntu 24.04 runner image includes. No browser test tool is installed:
+  # TestBrowser starts Chrome itself and reads the results the page POSTs
+  # back to the test's HTTP server.
+  wasm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build c2paseal.wasm
+        run: |
+          mkdir -p dist-wasm
+          GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o dist-wasm/c2paseal.wasm ./cmd/c2paseal-wasm
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist-wasm/
+          raw=$(wc -c < dist-wasm/c2paseal.wasm); gz=$(gzip -9 -c dist-wasm/c2paseal.wasm | wc -c)
+          echo "c2paseal.wasm: $raw bytes, $gz gzipped (gzip -9)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Vet and staticcheck (js/wasm)
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          GOOS=js GOARCH=wasm go vet ./cmd/c2paseal-wasm
+          GOOS=js GOARCH=wasm "$(go env GOPATH)/bin/staticcheck" ./cmd/c2paseal-wasm
+      - name: Size budget and browser test
+        env:
+          C2PASEAL_WASM: ${{ github.workspace }}/dist-wasm/c2paseal.wasm
+          C2PASEAL_BROWSER_TEST: "1"
+        run: |
+          google-chrome --version
+          go test -v -run 'TestWasmSize|TestBrowser' ./cmd/c2paseal-wasm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: c2paseal-wasm
+          path: dist-wasm/

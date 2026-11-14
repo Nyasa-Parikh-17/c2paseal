@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>c2paseal-wasm browser test</title>
+<!-- Served by TestBrowser. Loads the WebAssembly build, runs each case the
+     server lists at /cases.json through globalThis.c2paseal, and POSTs the
+     raw JSON strings back to /result for the Go test to check. -->
+<script src="wasm_exec.js"></script>
+<script>
+(async () => {
+  const report = (body) => fetch("result", { method: "POST", body: JSON.stringify(body) });
+  window.addEventListener("error", (e) => report({ error: "page error: " + e.message }));
+  window.addEventListener("unhandledrejection", (e) => report({ error: "unhandled rejection: " + e.reason }));
+  try {
+    const bytes = async (path) => new Uint8Array(await (await fetch(path)).arrayBuffer());
+    const text = async (path) => (await fetch(path)).text();
+
+    const go = new Go();
+    const { instance } = await WebAssembly.instantiateStreaming(fetch("c2paseal.wasm"), go.importObject);
+    go.run(instance);
+    if (typeof globalThis.c2paseal !== "object") throw new Error("globalThis.c2paseal not defined");
+
+    const cases = await (await fetch("cases.json")).json();
+    const results = [];
+    for (const c of cases) {
+      const opts = {};
+      for (const [k, v] of Object.entries(c.text || {})) opts[k] = await text(v);
+      for (const [k, v] of Object.entries(c.bytes || {})) opts[k] = await bytes(v);
+      Object.assign(opts, c.plain || {});
+      const input = c.notBytes ? "not bytes" : await bytes(c.file);
+      const output = globalThis.c2paseal[c.op](input, opts);
+      const r = { name: c.name, output };
+      // A signed file is verified again in the browser, with the same
+      // options as the verify cases, so the test can compare that result
+      // with the host's for the same bytes.
+      if (c.op === "sign" && c.reverify) {
+        const signed = JSON.parse(output);
+        if (signed.data) {
+          const data = Uint8Array.from(atob(signed.data), (ch) => ch.charCodeAt(0));
+          const vopts = {};
+          for (const [k, v] of Object.entries(c.reverify.text || {})) vopts[k] = await text(v);
+          r.reverified = globalThis.c2paseal.verify(data, vopts);
+        }
+      }
+      results.push(r);
+    }
+    await report({ userAgent: navigator.userAgent, version: globalThis.c2paseal.version(), results });
+  } catch (e) {
+    await report({ error: String(e && e.stack || e) });
+  }
+})();
+</script>

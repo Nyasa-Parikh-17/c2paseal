@@ -1333,3 +1333,79 @@ green): Credentio built in 17.5 min (3367 Bazel actions) and was cached
 unexplained. Its INTEROP.md matches the committed one except for the
 per-run values (generation time, manifest UUIDs of the files signed during
 the run, their time-stamp times).
+
+### Gate D — approved (2026-11-14)
+
+The user approved v0.2.0 after the gate D report (interop with Credentio
+on CI, negative set, fuzz summary). The CHANGELOG date was set in commit
+26be9bb (`release v0.2.0`); the tag is pushed by the user.
+
+### Phase 22 — WebAssembly build (2026-11-14)
+
+**Built**
+- `cmd/c2paseal-wasm`. `api.go` holds the logic and builds everywhere, so
+  its tests run on the host. `main_js.go` (`js && wasm`, `syscall/js` only)
+  defines `globalThis.c2paseal`. `main_other.go` gives the package a main
+  elsewhere that tells you to build it for js/wasm.
+  - `verify(bytes, opts)` returns the JSON of `c2paseal verify --json`
+    (`validation_results`, `validation_state`). Options: `trustAnchors`,
+    `allowedList`, `trustConfig` (strings) and `manifestStore`
+    (Uint8Array).
+  - `sign(bytes, opts)` returns the JSON of `c2paseal sign --json` without
+    the two file paths, plus `data` (the signed file, base64). Options:
+    `cert`, `key`, `title`, `sourceType`, `noHistory` and `ocspResponse`.
+  - `version()` returns the JSON of `version --json`.
+  - Bad options give `{"error": …}`, as the CLI does with `--json`. A panic
+    is turned into such an error rather than stopping the Go runtime for
+    later calls.
+  - No network in the browser build: no TSA, no remote fetching, no online
+    OCSP.
+- Library: `ParseSigner`, `ParseTrustAnchors`, `ParseAllowedList` and
+  `ParseTrustConfig`, the `Load*` functions on bytes (the browser has no
+  paths). `LoadSigner` now calls the same parser, and its errors still
+  name the file (tested).
+- Size budget: `WasmBudget` = 4 MiB gzipped (`gzip.BestCompression`), in
+  `TestWasmSize`, which runs in every `go test ./...` (it builds the
+  `.wasm` with the release flags `-trimpath -ldflags=-s -w`). At this
+  phase: 14.48 MB raw, 3.74 MB gzipped with Go's gzip (3.70 MB with
+  `gzip -9`), 89% of the budget. TinyGo was not needed; it stays the option
+  if the standard build outgrows the budget. It would be a new toolchain,
+  ask first.
+- Browser test: `TestBrowser` (runs with `C2PASEAL_BROWSER_TEST=1`). No
+  browser test tool was added. The test serves `testdata/browser.html`,
+  `wasm_exec.js` from the same Go, the `.wasm` and the fixtures from an
+  `httptest` server, starts headless Chrome (`$C2PASEAL_CHROME` or a usual
+  install path), and reads the results that the page POSTs back.
+  - 13 cases: verify signed JPEG (default and trusted), signed PNG and
+    time-stamped JPEG (trusted), tampered JPEG and PNG, unsigned PNG; sign
+    an unsigned JPEG and PNG and re-sign a signed JPEG (2 manifests); and
+    three error cases.
+  - The verify cases must equal this process's `verify()` JSON byte for
+    byte. Each signed file is verified again in the browser and must match
+    the host's JSON for the same bytes, and verify as Trusted on the host.
+- CI: a new `wasm` job in ci.yml (ubuntu-24.04, whose image has Chrome).
+  It builds the `.wasm` once, writes its size to the step summary, runs vet
+  and staticcheck for js/wasm, runs `TestWasmSize` and `TestBrowser` on
+  that file, and uploads `c2paseal.wasm` with `wasm_exec.js` as an
+  artefact.
+- README ("In the browser") and CHANGELOG (Unreleased).
+
+**Results (local, Windows, Chrome 157 headless)**
+- TestBrowser 13/13 and TestWasmSize pass. No Chrome processes or profile
+  folders are left behind.
+- Mutation check: a page that drops the verify options fails exactly the 6
+  cases that depend on them.
+- gofmt, build, vet and staticcheck (host and js/wasm) and the full suite
+  are clean. Coverage: root 83.6%, cmd/c2paseal-wasm 85.4% (host tests
+  only; the `syscall/js` glue is covered by TestBrowser).
+
+**Not done here (needs the user)**
+- Push, and the `wasm` CI job must be green: that is the phase's "Done
+  when".
+
+**Open issues**
+- Phase 23's raw manifest view needs the manifest store, which `verify()`
+  does not return. Add an `inspect(bytes)` (the JSON of `inspect`) in
+  Phase 23, where it is used.
+- The `.wasm` is not in the release archives yet; Phase 23 deploys it with
+  the site.

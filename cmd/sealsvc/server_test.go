@@ -381,8 +381,24 @@ func metricsText(t *testing.T, url string) string {
 	return string(b)
 }
 
-// sample matches one exposition-format sample line.
-var sample = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*(\{([a-zA-Z_][a-zA-Z0-9_]*="([^"\\]|\\.)*",?)*\})? -?[0-9.e+]+$`)
+// sample matches one exposition-format sample line; the value is a Go
+// float (as strconv writes it, e.g. 1.6244e-05), NaN or ±Inf.
+var sample = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*(\{([a-zA-Z_][a-zA-Z0-9_]*="([^"\\]|\\.)*",?)*\})? ([-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?|NaN|[-+]Inf)$`)
+
+// TestSampleGrammar keeps the pattern above honest, including the small
+// durations that Linux timers produce and Windows ones round to 0.
+func TestSampleGrammar(t *testing.T) {
+	for _, ok := range []string{`a 1`, `a 0`, `a 1.6244e-05`, `a -2.5E+10`, `a{b="c"} 3`, `a{b="q\"x",c="d"} .5`, `a NaN`, `a +Inf`} {
+		if !sample.MatchString(ok) {
+			t.Errorf("rejects %q", ok)
+		}
+	}
+	for _, bad := range []string{`a`, `a 1e`, `a 1.2.3`, `a{b=c} 1`, `1a 2`, `a e5`} {
+		if sample.MatchString(bad) {
+			t.Errorf("accepts %q", bad)
+		}
+	}
+}
 
 func TestMetricsAndHealth(t *testing.T) {
 	s := newTestServer(t, nil, nil)

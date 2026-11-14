@@ -1757,3 +1757,12 @@ Phase 26 waits for approval there.
   the Phase 24 open issue).
 - GHCR packages start private; after the first push the package may need
   to be made public in the repository's package settings.
+
+### Phase 25 — first CI run (2026-11-14)
+
+ci run 43595167389: every job passed except `sealsvc`, whose
+TestMetricsAndHealth rejected `…_sum{endpoint="verify"} 1.6244e-05`. That
+is a valid sample: the test's grammar had no `-` in the exponent, and on
+Windows the durations round to 0, so it never showed locally. The pattern
+now follows Go's float format (and NaN/±Inf), and a new TestSampleGrammar
+pins it. The image steps had not run (they come after the tests).

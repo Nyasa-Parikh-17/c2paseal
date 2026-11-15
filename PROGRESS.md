@@ -30,6 +30,8 @@ Scope-creep ideas go here instead of being built.
 - Web app: load your own trust list (for example the official C2PA trust
   list PEM) in the browser and keep it between visits; today the app trusts
   the demo root or nothing.
+- Watermark: crop robustness (a synchronisation template or a search over
+  crop offsets); a keyed mode, so the mark cannot be read without the key.
 - Test PKI: add the `c2pa-kp-claimSigning` EKU (1.3.6.1.4.1.62558.2.1) to
   the TEST ONLY signer. C2PA 2.4 §14.4.1 recommends it, and Credentio
   trusts anchors only for it, so today it stops at `signingCredential.invalid`
@@ -2019,3 +2021,74 @@ stopping at each gate.
   keys/gcpkms and cmd/sealsvc require core (and keys) v0.5.0, keeping
   their local replaces. Tags at this commit: v0.5.0, keys/awskms/v0.5.0,
   keys/gcpkms/v0.5.0, cmd/sealsvc/v0.5.0.
+
+### Phase 29 — Watermark module (2026-11-15)
+
+**Decisions (user, 2026-11-15):** write the watermark from scratch in pure
+Go; allow `golang.org/x/image` in the watermark module only (WebP decoding,
+plus resizing in the harness). For Phase 30: a file store on disk using the
+standard library only, self-hosted only.
+
+**Built**
+- `watermark/`, its own module (golang.org/x/image v0.48.0; it does not
+  depend on the core module):
+  - Luminance is area-resampled to 512×512, then one-level Haar LL, 4,096
+    4×4 blocks; each block's DCT DC coefficient carries one bit by
+    dithered QIM (step 28; keyed dither and block-to-bit permutation from a
+    fixed PCG seed).
+  - Payload: 64-bit ID plus CRC-32 = 96 bits, about 42 repetitions each,
+    soft-decision majority vote.
+  - Embedding: the working-scale change is smoothed with a [1 4 6 4 1]
+    binomial blur, resampled to the image size bilinearly and added to R,
+    G and B equally, then corrected for up to 8 passes until the 8-bit
+    result decodes. Alpha is kept.
+  - Extraction searches gains 0.80–1.20 (step 0.02) × 16 offsets, which
+    undoes uniform brightness and contrast changes. It requires the CRC
+    and a confidence of at least 0.2.
+  - API: `Embed`, `Extract` (`Result{ID, Confidence}`, `ErrNotFound`),
+    `BitErrors`, `PSNR`, `NewID`, `ParseID`, `Decode` (JPEG, PNG, WebP),
+    `Encode`, `EmbedFile` (JPEG at quality 95, or PNG; WebP gives
+    `ErrNoEncoder`), `ExtractFile`. Minimum size 128×128.
+- Test photos: four from the c2pa-rs corpus at 712f03b7 (IMG_0003.jpg,
+  P1000827.jpg, earth_apollo17.jpg, sample1.png; MIT/Apache-2.0).
+- `cmd/wmharness` writes `watermark/ROBUSTNESS.md`, failures included.
+  - Attacks: PNG, JPEG 95/90/80/70/60/50, resize 50/75/125 % and 50 % then
+    JPEG 75, crop 2/5/10 % centre and 25 % corner, a screenshot imitation
+    with and without a window border, brightness +5/+10/+17, contrast
+    ×0.9, gamma 1.2, noise σ=3.
+  - It also runs a false-positive check on the unmarked originals and on
+    those after JPEG 75.
+  - `-check` fails if the file is out of date. The output is identical on
+    Windows and on Linux (WSL).
+- CI: a `watermark` job (vet, staticcheck, tests, `wmharness -check`, the
+  table in the step summary). The nightly fuzz workflow now runs each
+  target from its own module (it used to `go test ./<pkg>` from the root,
+  which fails for nested modules).
+
+**How it got here (measured with the harness)**
+- First version (CRC-16, no search): 55/92. Brightness +5 inverted all 80
+  bits (a near half-step shift) while +10 passed by luck. The amplified
+  difference image showed flat 8×8 working-scale blocks, faintly visible
+  zoomed in on flat areas.
+- Then smoothing, CRC-32 and the gain/offset search: 71/92, PSNR
+  48.7–48.8 dB (up from 47.8), every colour change and the borderless
+  screenshot recovered, 0 false positives.
+
+**Results**
+- Recovered on all four images: lossless; JPEG 95 down to 50; resize 50,
+  75 and 125 %; brightness +5/+10/+17; contrast ×0.9; gamma 1.2; noise;
+  the screenshot without a border.
+- Resize 50 % then JPEG 75: 3/4 (fails on the 375×375 image, at 188 px).
+- Not recovered: any crop (2–25 %, 0/4 each), and the screenshot with a
+  border (0/4).
+- False positives: 0, on the originals, after JPEG 75, and on noise, flat
+  and gradient images in the tests.
+- Visibility: PSNR 48.7–48.8 dB. A faint soft mottling is visible when
+  zoomed in on large flat dark areas (checked by eye on sample1.png at 2×,
+  and on an amplified difference image); this is stated in ROBUSTNESS.md.
+- Tests: 97.4% coverage. FuzzExtractFile ran 30 s with no crashers.
+  gofmt, vet and staticcheck are clean.
+
+**Open issues**
+- Cropping: a synchronisation pattern or a search over crop offsets would
+  be needed. That is Future work, not attempted, and the harness says so.

@@ -60,8 +60,18 @@ jobs:
           path: ~/.cache/go-build/fuzz
           key: fuzz-${{ matrix.id }}-${{ github.run_id }}
           restore-keys: fuzz-${{ matrix.id }}-
+      # Run from the package's own module (watermark/, keys/* and
+      # cmd/sealsvc have their own go.mod).
       - name: Fuzz
-        run: go test "./${{ matrix.pkg }}" -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime "${{ inputs.fuzztime || '5m' }}"
+        env:
+          PKG: ${{ matrix.pkg }}
+        run: |
+          mod="$PKG"
+          while [ "$mod" != "." ] && [ ! -f "$mod/go.mod" ]; do mod=$(dirname "$mod"); done
+          rel="${PKG#"$mod"}"
+          rel="./${rel#/}"
+          cd "$mod"
+          go test "$rel" -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime "${{ inputs.fuzztime || '5m' }}"
       - name: Keep crashers
         if: failure()
         uses: actions/upload-artifact@v7

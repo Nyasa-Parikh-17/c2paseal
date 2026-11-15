@@ -3,6 +3,15 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Added
+- **Invisible watermark** (`watermark/`, its own module): a from-scratch
+  DWT-DCT watermark carrying a 64-bit ID with a CRC-32. A robustness
+  harness (`cmd/wmharness`) measures JPEG, resizing, cropping, screenshots,
+  colour changes and noise, and publishes the results, failures included,
+  in `watermark/ROBUSTNESS.md`; CI regenerates and checks them.
+
 ## v0.5.0 — 2026-11-15
 
 ### Added

@@ -191,3 +191,27 @@ jobs:
           [ "$(docker inspect -f '{{.Config.User}}' sealsvc:ci)" = "nonroot:nonroot" ]
           docker logs sealsvc 2>&1 | tail -5
           echo "image size: $(docker image inspect -f '{{.Size}}' sealsvc:ci) bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The watermark module (its own go.mod, with golang.org/x/image for WebP
+  # decoding): tests, then the robustness harness, whose results must match
+  # the published watermark/ROBUSTNESS.md.
+  watermark:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: watermark
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: watermark/go.mod
+          cache-dependency-path: watermark/go.sum
+      - name: Vet, staticcheck and test
+        run: |
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+          go test ./...
+      - name: Robustness harness
+        run: |
+          go run ./cmd/wmharness -check
+          cat ROBUSTNESS.md >> "$GITHUB_STEP_SUMMARY"

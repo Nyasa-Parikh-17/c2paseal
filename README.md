@@ -130,6 +130,15 @@ It ships as a distroless container image,
 `ghcr.io/nyasa-parikh-17/c2paseal/sealsvc`. There is a compose example in
 [deploy/sealsvc](deploy/sealsvc/compose.yaml).
 
+### Invisible watermark
+
+[watermark](watermark) embeds an invisible 64-bit ID in a JPEG or PNG and
+reads it back from JPEG, PNG or WebP copies. It is its own module, written
+in pure Go. It survives re-compression, resizing and colour changes, but
+not cropping; [ROBUSTNESS.md](watermark/ROBUSTNESS.md) has the measured
+results, failures included. The ID is how a stripped copy finds its way
+back to its manifest.
+
 ### In the browser (WebAssembly)
 
 `cmd/c2paseal-wasm` is the same library built for browsers with

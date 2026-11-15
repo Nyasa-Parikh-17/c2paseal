@@ -274,7 +274,9 @@ func redactPath(msg, path string) string {
 	if msg == "" {
 		return msg
 	}
-	base := filepath.Base(path)
+	// The file name after the last separator of either kind, whatever the
+	// OS (a tool under WSL may report a Windows path, and the other way).
+	base := path[strings.LastIndexAny(path, `\/`)+1:]
 	re := regexp.MustCompile(`(?:[A-Za-z]:)?(?:[\\/][^\\/;"]+)*[\\/]` + regexp.QuoteMeta(base))
 	return re.ReplaceAllString(msg, base)
 }

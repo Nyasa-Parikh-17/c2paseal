@@ -2006,3 +2006,16 @@ stopping at each gate.
   for fragmented files (Phase 32 needs the latter for video).
 - `stco`/`co64` offset fix-ups for MP4 (Phase 32).
 - wasm headroom is 9%.
+
+### Gate G — approved; release v0.5.0 (2026-11-15)
+
+- The user approved v0.5.0 ("yes, version 5") and asked to continue with
+  Phases 29 and 30.
+- ci for afa9a81 failed on Linux and macOS only: TestRedactPath used a
+  Windows path, which `filepath.Base` does not split there. redactPath now
+  splits on both separators; the test passes on Windows and in WSL Linux
+  (go1.27.1). The key modules' v0.4.0 tags are pushed (c3aa8d5).
+- Release commit: CHANGELOG v0.5.0 dated 2026-11-15; keys/awskms,
+  keys/gcpkms and cmd/sealsvc require core (and keys) v0.5.0, keeping
+  their local replaces. Tags at this commit: v0.5.0, keys/awskms/v0.5.0,
+  keys/gcpkms/v0.5.0, cmd/sealsvc/v0.5.0.

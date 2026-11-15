@@ -3,7 +3,7 @@ module github.com/Nyasa-Parikh-17/c2paseal/keys/awskms
 go 1.27
 
 require (
-	github.com/Nyasa-Parikh-17/c2paseal v0.5.0
+	github.com/Nyasa-Parikh-17/c2paseal v0.6.0
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/service/kms v1.62.6

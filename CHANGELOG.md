@@ -3,7 +3,7 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
-## Unreleased
+## v0.6.0 — 2026-11-15
 
 ### Added
 - **Invisible watermark** (`watermark/`, its own module): a from-scratch

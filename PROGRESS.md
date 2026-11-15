@@ -2202,3 +2202,14 @@ the standard library; self-hosted only.
 - Recovery under `serve` would need the watermark in the core module (its
   x/image dependency rules that out).
 - wasm headroom is 8%.
+
+### Release v0.6.0 — 2026-11-15 (gate H approved)
+- Gate H approved by the user. CHANGELOG dated; keys/awskms, keys/gcpkms,
+  cmd/sealsvc, cmd/sealstore and cmd/c2paseal-wasm require the core (and
+  sealsvc the keys modules) at v0.6.0.
+- In a clean clone, every module is tidy (no changes), the core and the
+  six other modules build and pass their tests, and the js/wasm build
+  passes vet.
+- To push (user): main, then tags v0.6.0, keys/awskms/v0.6.0,
+  keys/gcpkms/v0.6.0, cmd/sealsvc/v0.6.0, cmd/sealstore/v0.6.0,
+  cmd/c2paseal-wasm/v0.6.0, watermark/v0.6.0 on the release commit.

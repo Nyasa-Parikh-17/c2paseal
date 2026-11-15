@@ -20,7 +20,8 @@ const (
 	FormatAVIF = asset.AVIF
 )
 
-// ErrUnsupportedFormat is returned for files that are not JPEG, PNG or WebP.
+// ErrUnsupportedFormat is returned for files that are not JPEG, PNG, WebP,
+// HEIC or AVIF.
 var ErrUnsupportedFormat = asset.ErrUnsupportedFormat
 
 // ErrPrerelease is returned for manifest stores written before C2PA 1.0,
@@ -45,7 +46,7 @@ func decoded(root *jumbf.Box) ([]*manifest.Manifest, error) {
 // not verify anything; hashed-URI results are recorded in each manifest's
 // HashChecks.
 type ManifestStore struct {
-	Format    string // FormatJPEG, FormatPNG or FormatWebP
+	Format    string // FormatJPEG, FormatPNG, FormatWebP, FormatHEIC or FormatAVIF
 	Root      *jumbf.Box
 	Manifests []*manifest.Manifest // in store order
 	Active    *manifest.Manifest   // the last manifest

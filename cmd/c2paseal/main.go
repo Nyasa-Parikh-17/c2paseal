@@ -1,5 +1,5 @@
 // Command c2paseal inspects, verifies and signs C2PA Content Credentials in
-// JPEG and PNG files, and serves a demo UI.
+// JPEG, PNG, WebP, HEIC and AVIF files, and serves a demo UI.
 //
 //	c2paseal inspect [--json] [--recursive] <file or folder>...
 //	c2paseal verify  [--json] [--trust anchors.pem] [--recursive] <file or folder>...
@@ -47,7 +47,8 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-const usageText = `c2paseal reads, verifies and signs C2PA Content Credentials in JPEG and PNG files.
+const usageText = `c2paseal reads, verifies and signs C2PA Content Credentials in JPEG, PNG,
+WebP, HEIC and AVIF files.
 
 usage:
   c2paseal inspect [--json] [--recursive] <file or folder>...
@@ -57,22 +58,23 @@ usage:
                   [--trust-config file] [--fetch-ocsp] [--manifest store.c2pa]
                   [--fetch-remote] [--recursive] <file or folder>...
         validate the manifest store and print the C2PA status codes
-
-  Given a folder or several files, inspect and verify write one result per
-  file (JSON Lines with --json; inspect always does) for the folder's JPEG
-  and PNG files, and its subfolders' with --recursive.
   c2paseal sign [--json] --cert chain.pem --key key.pem --in in --out out
                 [--title t] [--source-type uri] [--tsa url]
                 [--no-history] [--remote url] [--sidecar]
                 [--ocsp | --ocsp-response file.der]
-        sign a JPEG or PNG; an existing manifest store is kept as the
-        parent ingredient unless --no-history is given
+        sign a JPEG, PNG, WebP, HEIC or AVIF file; an existing manifest
+        store is kept as the parent ingredient unless --no-history is given
   c2paseal serve [--addr 127.0.0.1:8080] [--pki testdata/pki]
         run the demo UI in a browser (signs with the TEST ONLY PKI)
   c2paseal version [--json]
         print the version
 
+Given a folder or several files, inspect and verify write one result per
+file (JSON Lines with --json; inspect always does) for the folder's images,
+and its subfolders' with --recursive.
+
 Run "c2paseal <command> -h" for a command's flags.
+Documentation: https://nyasa-parikh-17.github.io/c2paseal/docs/
 
 exit codes:
   0  success, or the manifest is valid (every manifest, for several files)
@@ -241,7 +243,7 @@ func signCmd(args []string, stdout, stderr io.Writer) int {
 		withJSON("print the result as JSON")
 	cert := c.fs.String("cert", "", "PEM certificate chain: signer first, then intermediates (required)")
 	key := c.fs.String("key", "", "the signer's ECDSA P-256 private key: a PEM file, or a key URI such as file:key.pem (required; awskms: and gcpkms: keys need a program that imports keys/awskms or keys/gcpkms)")
-	in := c.fs.String("in", "", "JPEG or PNG to sign (required)")
+	in := c.fs.String("in", "", "JPEG, PNG, WebP, HEIC or AVIF to sign (required)")
 	out := c.fs.String("out", "", "where to write the signed file (required)")
 	title := c.fs.String("title", "", "optional dc:title for the claim")
 	tsa := c.fs.String("tsa", "", "RFC 3161 time-stamp authority URL; time-stamps the signature (needs network)")

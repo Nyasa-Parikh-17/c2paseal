@@ -1,6 +1,7 @@
 name: pages
 
-# Builds the web app (web/site plus the WebAssembly build) and deploys it to
+# Builds the web app (web/site plus the WebAssembly build) and the docs site
+# (docs/, at /docs/) and deploys them to
 # GitHub Pages. The repository's Pages source must be "GitHub Actions"
 # (Settings → Pages), once.
 
@@ -39,6 +40,8 @@ jobs:
           cp -r web/site/. _site/
           (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../_site/c2paseal.wasm .)
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/
+          # The documentation site, from docs/*.md (fails on a broken link).
+          go run ./scripts/docsite -src docs -out _site/docs
           # A new cache name per deployment, so browsers replace the old one.
           version="${GITHUB_SHA::12}"
           sed -i "s/^const VERSION = \"dev\";$/const VERSION = \"$version\";/" _site/sw.js

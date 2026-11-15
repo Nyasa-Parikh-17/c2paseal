@@ -32,7 +32,7 @@ jobs:
       # The modules with their own go.mod: key providers and sealsvc.
       - name: Test the other modules
         run: |
-          for m in keys/awskms keys/gcpkms cmd/sealsvc cmd/sealstore cmd/c2paseal-wasm watermark; do
+          for m in keys/awskms keys/gcpkms cmd/sealsvc cmd/sealstore cmd/c2paseal-wasm watermark examples; do
             (cd "$m" && go vet ./... && go test ./...)
           done
 

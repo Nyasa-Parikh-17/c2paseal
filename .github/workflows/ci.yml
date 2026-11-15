@@ -268,3 +268,69 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{http_code}' -X PUT --data-binary x http://127.0.0.1:8090/v1/manifests/0123456789abcdef)" = 401 ]
           [ "$(docker inspect -f '{{.Config.User}}' sealstore:ci)" = "nonroot:nonroot" ]
           echo "image size: $(docker image inspect -f '{{.Size}}' sealstore:ci) bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The GitHub Action (action.yml) run as a user's workflow would run it:
+  # sign test images with the TEST ONLY PKI, verify the copies (Trusted
+  # under the test root, which fail-on: untrusted requires), and check that
+  # verifying the unsigned originals fails the step.
+  action:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Sign
+        id: sign
+        uses: ./
+        with:
+          command: sign
+          files: |
+            testdata/unsigned/small.*
+            testdata/unsigned/sample.heic
+          cert: testdata/pki/leaf-chain.pem
+          key: testdata/pki/leaf.key
+          title: CI action demo
+          out-dir: ${{ runner.temp }}/signed
+      - name: Verify the signed copies
+        id: verify
+        uses: ./
+        with:
+          command: verify
+          files: ${{ runner.temp }}/signed
+          trust: testdata/pki/trust-anchors.pem
+          fail-on: untrusted
+      - name: Verify the unsigned originals (must fail)
+        id: unsigned
+        continue-on-error: true
+        uses: ./
+        with:
+          command: verify
+          files: testdata/unsigned/small.jpg
+      - name: Check outputs
+        shell: bash
+        run: |
+          echo "signed ${{ steps.sign.outputs.signed-count }}, trusted ${{ steps.verify.outputs.trusted-count }}, unsigned step: ${{ steps.unsigned.outcome }}"
+          [ "${{ steps.sign.outputs.signed-count }}" = 4 ]
+          [ "${{ steps.verify.outputs.trusted-count }}" = 4 ]
+          [ "${{ steps.unsigned.outcome }}" = failure ]
+          test -s "${{ steps.verify.outputs.report }}"
+
+  # The examples module: each example's test runs it against the test PKI.
+  examples:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: examples
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: examples/go.mod
+          cache-dependency-path: examples/go.sum
+      - name: Vet, staticcheck and test
+        run: |
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+          go test -v ./...

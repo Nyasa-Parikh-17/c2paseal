@@ -3,6 +3,41 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Added
+- **HTTP middleware** (`middleware`): `middleware.Sign` wraps an
+  `http.Handler` and replaces each uploaded image with its signed copy. It
+  handles multipart file parts and whole-body `image/*` uploads, in JPEG,
+  PNG, WebP, HEIC and AVIF. Options: `Prepare` per file, `Fields`,
+  `MaxBytes`, `RejectUnsupported`, `ErrorHandler`. `middleware.Files`
+  reports what was signed. A failing key or KMS gives 500; a corrupt
+  upload gives 422. Standard library only.
+- **GitHub Action** (`action.yml`): `uses: Nyasa-Parikh-17/c2paseal@<version>`
+  signs or verifies images in a workflow. It takes globs with `**`,
+  folders, keys from files or secrets, and `fail-on`
+  (invalid/untrusted/never). It writes file annotations, a job summary and
+  a JSON Lines report. It builds from the tagged source on Linux, macOS and
+  Windows runners. CI runs it on all three.
+- **Documentation site** at `/docs/` on the Pages site, from `docs/*.md`:
+  a quickstart, a guide per component, and "What C2PA does and does not
+  prove". `scripts/docsite` renders it with the standard library and fails
+  on a broken link.
+- **Examples** (`examples/`, its own module): sign-and-verify,
+  upload-server (middleware + key URIs), verify-folder and
+  watermark-recover, each with a test.
+- `PENDING_APPROVAL.md` (image features awaiting a decision),
+  `FUTURE_SCOPE.md` and `RELEASING.md`.
+
+### Fixed
+- `container/bmff`: `Insert` refuses a file whose `ftyp` box has size 0
+  (extends to the end of the file). The inserted manifest box would have
+  been read as part of `ftyp`. Found by the nightly fuzzer.
+- Web app: the offline service worker no longer answers uncached pages
+  (such as the docs) with the app. It goes to the network, and falls back
+  to the app only when offline.
+- The package documentation and the CLI help listed only JPEG and PNG.
+
 ## v0.6.0 — 2026-11-15
 
 ### Added

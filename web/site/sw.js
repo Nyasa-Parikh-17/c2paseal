@@ -37,8 +37,18 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const hit = await cache.match(req, { ignoreSearch: true }) ||
-      (req.mode === "navigate" ? await cache.match("./") : undefined);
-    return hit || fetch(req);
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) return hit;
+    try {
+      // Not part of the app (the docs pages, for example): the network.
+      return await fetch(req);
+    } catch (err) {
+      // Offline: a page navigation gets the app; anything else fails.
+      if (req.mode === "navigate") {
+        const app = await cache.match("./");
+        if (app) return app;
+      }
+      throw err;
+    }
   })());
 });

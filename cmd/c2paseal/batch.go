@@ -63,7 +63,7 @@ type entry struct {
 }
 
 // expand turns the command-line paths into the files to process, in order:
-// a file stays as given; a folder gives its JPEG and PNG files sorted by
+// a file stays as given; a folder gives its JPEG, PNG, WebP, HEIC and AVIF files sorted by
 // name, and with recursive those of its subfolders too.
 func expand(paths []string, recursive bool) []entry {
 	var out []entry

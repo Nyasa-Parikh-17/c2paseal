@@ -1,0 +1,114 @@
+name: C2paSeal
+description: Sign or verify C2PA Content Credentials in JPEG, PNG, WebP, HEIC and AVIF images, in pure Go.
+author: Nyasa-Parikh-17
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  command:
+    description: "sign or verify"
+    required: true
+  files:
+    description: >
+      Images to process, one per line: paths, folders (their images,
+      recursively) or globs, where ** matches any number of folders.
+    required: true
+
+  # sign
+  cert:
+    description: "sign: PEM certificate chain file, signer first, then intermediates"
+    required: false
+  key:
+    description: "sign: the signer's ECDSA P-256 private key: a PEM file or a file: URI"
+    required: false
+  cert-pem:
+    description: "sign: the certificate chain itself, for example from a secret (instead of cert)"
+    required: false
+  key-pem:
+    description: "sign: the private key itself, from a secret (instead of key)"
+    required: false
+  out-dir:
+    description: "sign: where signed copies go, under their relative paths"
+    required: false
+    default: c2paseal-signed
+  in-place:
+    description: "sign: true to overwrite the files instead of writing copies to out-dir"
+    required: false
+    default: "false"
+  title:
+    description: "sign: dc:title for the claims"
+    required: false
+  source-type:
+    description: "sign: IPTC digital source type URI for the c2pa.created action"
+    required: false
+  tsa:
+    description: "sign: RFC 3161 time-stamp authority URL"
+    required: false
+  no-history:
+    description: "sign: true to replace existing Content Credentials instead of keeping them as the parent ingredient"
+    required: false
+    default: "false"
+
+  # verify
+  trust:
+    description: "verify: PEM trust anchor files, one per line (for example the official C2PA trust list)"
+    required: false
+  fail-on:
+    description: >
+      verify: when the step fails: invalid (a manifest is invalid or
+      missing), untrusted (also when the signer is not trusted) or never.
+    required: false
+    default: invalid
+
+outputs:
+  report:
+    description: "Path of the JSON Lines report: one line per file"
+    value: ${{ steps.run.outputs.report }}
+  signed-files:
+    description: "sign: the signed files, one per line"
+    value: ${{ steps.run.outputs.signed-files }}
+  signed-count:
+    description: "sign: number of files signed"
+    value: ${{ steps.run.outputs.signed-count }}
+  trusted-count:
+    description: "verify: number of Trusted files"
+    value: ${{ steps.run.outputs.trusted-count }}
+  valid-count:
+    description: "verify: number of Valid files (intact, signer not trusted)"
+    value: ${{ steps.run.outputs.valid-count }}
+  invalid-count:
+    description: "verify: number of Invalid files"
+    value: ${{ steps.run.outputs.invalid-count }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache-dependency-path: ${{ github.action_path }}/go.sum
+    - name: Build C2paSeal
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/c2paseal-action$(go env GOEXE)" ./internal/cmd/ghaction
+    - id: run
+      name: C2paSeal ${{ inputs.command }}
+      shell: bash
+      run: '"$RUNNER_TEMP/c2paseal-action$(go env GOEXE)"'
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_CERT: ${{ inputs.cert }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_CERT-PEM: ${{ inputs.cert-pem }}
+        INPUT_KEY-PEM: ${{ inputs.key-pem }}
+        INPUT_OUT-DIR: ${{ inputs.out-dir }}
+        INPUT_IN-PLACE: ${{ inputs.in-place }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_SOURCE-TYPE: ${{ inputs.source-type }}
+        INPUT_TSA: ${{ inputs.tsa }}
+        INPUT_NO-HISTORY: ${{ inputs.no-history }}
+        INPUT_TRUST: ${{ inputs.trust }}
+        INPUT_FAIL-ON: ${{ inputs.fail-on }}

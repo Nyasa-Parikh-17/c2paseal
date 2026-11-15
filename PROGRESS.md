@@ -40,6 +40,13 @@ Scope-creep ideas go here instead of being built.
 - Credentio now has a writer (`tools:asset_write`, README of commit
   ee4078b); Phase 17 recorded that it could not sign. Signing-side interop
   (C2paSeal reading Credentio's files) is not in any phase.
+- (Phase 31) More image formats the specification covers: TIFF/DNG, GIF,
+  SVG, JPEG XL (check c2patool support first). Audio (WAV, MP3, FLAC).
+- (Phase 31) Creator identity assertions (CAWG); streaming sign/verify for
+  large files; sealsvc/sealstore on shared storage with replicas;
+  fingerprint matching in sealstore; a browser extension; CI integrations
+  beyond GitHub; continuous interop against new c2patool releases.
+  Curated in FUTURE_SCOPE.md and PENDING_APPROVAL.md.
 
 ## Log
 
@@ -2213,3 +2220,89 @@ the standard library; self-hosted only.
 - To push (user): main, then tags v0.6.0, keys/awskms/v0.6.0,
   keys/gcpkms/v0.6.0, cmd/sealsvc/v0.6.0, cmd/sealstore/v0.6.0,
   cmd/c2paseal-wasm/v0.6.0, watermark/v0.6.0 on the release commit.
+
+## Phase 31 — Integrations and docs site (2026-11-16)
+
+**Before the phase**
+- The nightly fuzzer (run 43699401138) found a `container/bmff` property
+  failure: `Strip(Insert(s)) != s` for `"\x00\x00\x00\x00ftyp"`. An
+  `ftyp` of size 0 runs to the end of the file, so the box Insert put after
+  it was read as part of ftyp. `Insert` now refuses such a file
+  (ErrMalformed). The input is a seed in `testdata/fuzz/FuzzParse`, and
+  120 s of fuzzing found nothing more. Commit b2fa62d.
+- v0.5.0 and v0.6.0: the user pushed all tags in one push each. GitHub
+  creates no events for a push of more than three tags, so **no release
+  workflow ran** for either. The fix is to re-push each main tag alone
+  (RELEASING.md now says to push the main tag on its own).
+- Phase 20's open check: the photo the user provided (1280×960 JFIF) has no
+  EXIF and no C2PA. It was re-encoded by a chat app, so it cannot be used.
+  The check stays open; PENDING_APPROVAL.md says what file is needed. The
+  photo was not added to the repository.
+
+**Built**
+- `middleware` (core module, standard library only): `Sign(Config)` →
+  `func(http.Handler) http.Handler`. Multipart file parts (raw parts, so
+  other parts are copied byte for byte; a new boundary) and whole-body
+  `image/*` uploads; the format comes from the bytes. `Prepare` gets a
+  per-file shallow copy of the options. `Files(r)` reports field, file
+  name, format, signed, parent and size. Status codes: 400 (malformed
+  multipart, Prepare error), 413, 415 (RejectUnsupported), 422 (cannot
+  sign the image), 500 (the key failed, detected by wrapping the signer;
+  TSA/OCSP/context errors; no details in the body). `ExampleSign` is
+  runnable.
+- GitHub Action: `action.yml` (composite: setup-go from the action's
+  go.mod, build `internal/cmd/ghaction`, run it). Inputs are read from
+  `INPUT_*`: command, files (paths, folders, globs with `**`), cert/key or
+  cert-pem/key-pem, out-dir, in-place, title, source-type, tsa,
+  no-history, trust, fail-on. Outputs: report (JSON Lines), signed-files,
+  counts. Workflow-command annotations, with separate escaping for
+  messages and properties; a job summary table.
+- `examples/` (own module: core + watermark; not tagged): sign-and-verify,
+  upload-server, verify-folder, watermark-recover, each with a test that
+  skips outside the repository.
+- Docs site: `docs/*.md` + `docs/nav.txt`, rendered by `scripts/docsite`
+  (standard library: headings with anchors, code, nested lists, tables,
+  quotes, inline markup; .md → .html; links outside docs/ → GitHub; a broken
+  link fails). Pages builds it into `/docs/`. Pages: index, quickstart, cli,
+  library, keys, middleware, github-action, sealsvc, web-app, watermark,
+  what-c2pa-proves, certificates, formats, project.
+- README rewritten. New PENDING_APPROVAL.md, FUTURE_SCOPE.md, RELEASING.md.
+- Fixes found while writing the docs: the service worker answered every
+  uncached navigation with the app, so it would have hidden /docs/. It now
+  goes to the network and uses the app only offline. doc.go and the CLI
+  help listed only JPEG and PNG.
+
+**Tests**
+- middleware: TestMultipart (JPEG, PNG, WebP, HEIC parts, a text part and
+  a form value; Prepare's title; Files), TestWholeBody (JPEG, PNG, WebP,
+  AVIF), TestResign (parent), TestPassThrough, TestRejections (8 cases,
+  including a failing signer → 500 without leaking the error), TestConfig,
+  ExampleSign. Every signed upload verifies Trusted under the test root.
+- ghaction: TestMatch, TestSignThenVerify (4 formats; Valid/Trusted and the
+  fail-on modes; annotation on an unsigned file), TestSignInPlaceWithPEMInputs
+  (signtest.CheckFile, so c2patool checks it too when installed; re-sign →
+  parent), TestErrors (10 cases).
+- CI job `action` runs the action itself on ubuntu, macOS and Windows:
+  sign 4 files, verify them Trusted with fail-on: untrusted, and check
+  that verifying an unsigned file fails the step. CI job `examples`.
+- docsite: TestRender, TestBrokenLinks, TestNav, and TestDocs, which builds
+  the real docs/ folder, so a broken docs link fails CI.
+- Quickstart: every command run as written, from a folder laid out like
+  the release archive. The outputs on the page are the real ones (Valid →
+  Trusted → Invalid with assertion.dataHash.mismatch after appending a
+  byte). The commands take seconds; the download is one archive of a few
+  MB.
+- Layout: screenshots of the docs at 1200 px (light and dark) and at 390 px
+  in an iframe (headless Chrome clamps its window above 390 px): no page
+  overflow; wide tables scroll in their own box.
+- Core: gofmt, vet, staticcheck clean; all tests pass. cmd/c2paseal-wasm:
+  TestWasmSize, TestBrowser, TestSite pass in headless Chrome.
+
+**Not done here (needs the user)**
+- Re-trigger the v0.5.0 and v0.6.0 releases (each main tag pushed again,
+  alone).
+- Push main. Then CI (the action job on three OSes, examples) and the Pages
+  deploy of /docs/.
+- Gate I: docs site and Action demo; the "new user in under 5 minutes"
+  check is best done by a person following the quickstart once the v0.6.0
+  release assets exist. Then ask before v0.7.0.

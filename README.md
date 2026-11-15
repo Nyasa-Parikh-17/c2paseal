@@ -1,75 +1,83 @@
 # C2paSeal
 
-A pure-Go **signer and verifier** for [C2PA](https://c2pa.org) Content
-Credentials in **JPEG**, **PNG**, **WebP**, **HEIC** and **AVIF** files. It builds with
-`CGO_ENABLED=0`.
+**Sign and verify C2PA Content Credentials in pure Go.**
 
-## What it does
+[![ci](https://github.com/Nyasa-Parikh-17/c2paseal/actions/workflows/ci.yml/badge.svg)](https://github.com/Nyasa-Parikh-17/c2paseal/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Nyasa-Parikh-17/c2paseal.svg)](https://pkg.go.dev/github.com/Nyasa-Parikh-17/c2paseal)
+[![Release](https://img.shields.io/github/v/release/Nyasa-Parikh-17/c2paseal)](https://github.com/Nyasa-Parikh-17/c2paseal/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-The reference C2PA implementation is the Rust `c2pa-rs` library. Using it
-from Go means calling `c2patool` as a separate program or linking c2pa-rs
-through CGO. C2paSeal signs and verifies in plain Go instead. It builds a
-C2PA 2.4 manifest, embeds it in the image (APP11 segments in JPEG, a `caBX`
-chunk in PNG), binds it to the image bytes with a `c2pa.hash.data` hard
-binding, signs it with ES256 and can add an RFC 3161 time-stamp. The result
-is one statically linked binary, or a Go package, that cross-compiles
-anywhere Go does.
+C2paSeal reads, verifies and **signs** [C2PA](https://c2pa.org) Content
+Credentials in **JPEG, PNG, WebP, HEIC and AVIF** images. It builds with
+`CGO_ENABLED=0` into one static binary or a Go package, with no Rust
+toolchain, C library or external tool.
 
-It is not the only pure-Go C2PA code: for example
-[`richardwooding/c2pa`](https://pkg.go.dev/github.com/richardwooding/c2pa)
-(used through its `c2pa-mcp` CLI in [INTEROP.md](INTEROP.md)) also validates
-and documents a signing command. C2paSeal's focus is a small, auditable
-signer for JPEG, PNG, WebP, HEIC and AVIF:
-- **Few dependencies:** three, plus the standard library.
-- **Byte-exact writes:** reserve-and-backfill, with the placeholder-length
-  invariant checked in production code.
-- **Checked against the oracle:** every result is compared with
-  `c2patool`, the C2PA reference tool.
+**[Try it in your browser →](https://nyasa-parikh-17.github.io/c2paseal/)**
+It is the same library compiled to WebAssembly. Your files never leave your
+machine.
 
-`c2patool` accepts C2paSeal's signed files. On the test corpus, C2paSeal's
-verifier agrees with `c2patool` on every file where `c2patool` reports
-statuses (see [INTEROP.md](INTEROP.md)).
+**[Read the documentation →](https://nyasa-parikh-17.github.io/c2paseal/docs/)**
+It starts with a five-minute [quickstart](docs/quickstart.md).
 
-Dependencies: the Go standard library plus `fxamacker/cbor`,
-`veraison/go-cose` and `digitorus/timestamp`.
+---
 
-**Try it in the browser:** <https://nyasa-parikh-17.github.io/c2paseal/>.
-The web app runs the library as WebAssembly, so files stay on your machine;
-after the first visit it also works offline. Its "Sign a sample" tab uses
-the TEST ONLY demo certificate, whose private key is public.
+## Why C2paSeal
+
+The reference C2PA implementation is the Rust library `c2pa-rs`. From Go,
+that means running `c2patool` as a separate program or linking Rust through
+CGO. C2paSeal does it in plain Go, with a focus on a **small, auditable
+signer**:
+
+- **Checked against the reference.** Every result is compared with
+  `c2patool`. On 122 test files, C2paSeal agrees with it wherever
+  `c2patool` gives a verdict. [INTEROP.md](INTEROP.md) has the full
+  results across four validators.
+- **Byte-exact.** Signing reserves the manifest's space, then fills it in.
+  Production code checks that the final manifest has exactly the
+  placeholder's length.
+- **Few dependencies.** The core module uses three (`fxamacker/cbor`,
+  `veraison/go-cose`, `digitorus/timestamp`) plus the standard library.
+  Cloud SDKs and image libraries live in separate modules.
+- **Safe on hostile input.** Malformed files become C2PA failure codes,
+  never panics. Every parser is fuzzed nightly.
+
+Other pure-Go C2PA code exists, such as
+[`richardwooding/c2pa`](https://pkg.go.dev/github.com/richardwooding/c2pa).
+C2paSeal's focus is the signer.
+
+## Everything in the box
+
+| | | Guide |
+|---|---|---|
+| **CLI** | `c2paseal sign`, `verify`, `inspect`, batch mode over folders | [Command line](docs/cli.md) |
+| **Go library** | `Sign`, `Verify`, `Read`, in memory or on files | [Go library](docs/library.md) |
+| **KMS keys** | AWS KMS and Google Cloud KMS through key URIs; the key never leaves KMS | [Keys and KMS](docs/keys.md) |
+| **HTTP middleware** | Signs images as they are uploaded to your Go service | [HTTP middleware](docs/middleware.md) |
+| **GitHub Action** | Sign or verify images in a workflow | [GitHub Action](docs/github-action.md) |
+| **sealsvc** | A self-hosted signing API with API keys, rate limits, audit log and metrics | [Signing service](docs/sealsvc.md) |
+| **Web app** | Verify and sign in the browser, offline | [Web app](docs/web-app.md) |
+| **Watermark + sealstore** | Get credentials back for a copy that lost them | [Watermark and recovery](docs/watermark.md) |
 
 ## Quick start
 
-Requires Go 1.27 or newer. From a clone of this repository (the test
-certificates in `testdata/pki` work out of the box):
+Download the archive for your system from the
+[latest release](https://github.com/Nyasa-Parikh-17/c2paseal/releases/latest)
+and unpack it. It includes TEST ONLY certificates, so this works straight
+away:
 
 ```sh
-git clone https://github.com/Nyasa-Parikh-17/c2paseal && cd c2paseal
-CGO_ENABLED=0 go build -o c2paseal ./cmd/c2paseal
 ./c2paseal sign --cert testdata/pki/leaf-chain.pem --key testdata/pki/leaf.key \
-    --in testdata/unsigned/small.jpg --out signed.jpg --title "My photo"
-./c2paseal verify signed.jpg                                          # state: Valid (signer untrusted)
-./c2paseal verify --trust testdata/pki/trust-anchors.pem signed.jpg   # state: Trusted
-./c2paseal inspect signed.jpg                                         # manifest store as JSON
-./c2paseal verify --json --recursive photos/                          # one JSON line per file
-./c2paseal verify --trust C2PA-TRUST-LIST.pem --trust C2PA-TSA-TRUST-LIST.pem photo.jpg  # official trust lists
-./c2paseal serve                                                      # web app: http://127.0.0.1:8080/
+    --in photo.jpg --out signed.jpg --title "My photo"
+
+./c2paseal verify signed.jpg                                         # state: Valid (signer untrusted)
+./c2paseal verify --trust testdata/pki/trust-anchors.pem signed.jpg  # state: Trusted
+./c2paseal inspect signed.jpg                                        # the manifest store as JSON
 ```
 
-On Windows PowerShell, build with
-`$env:CGO_ENABLED=0; go build -o c2paseal.exe ./cmd/c2paseal` and run
-`.\c2paseal.exe`. Prebuilt binaries for Linux, macOS and Windows are attached
-to each [release](https://github.com/Nyasa-Parikh-17/c2paseal/releases).
-Release builds are reproducible: each release's notes give the Go version
-and the commands to rebuild its archives and compare them with its
-`SHA256SUMS`. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+On Windows, use `.\c2paseal.exe`. To build from source with Go 1.27 or newer:
+`CGO_ENABLED=0 go install github.com/Nyasa-Parikh-17/c2paseal/cmd/c2paseal@latest`.
 
-If port 8080 is taken, run `./c2paseal serve --addr 127.0.0.1:8090`.
-Every command takes `-h` and `--json`. Exit codes: 0 success or valid,
-1 invalid or failed, 2 usage error. Add `--tsa <url>` to `sign` for an
-RFC 3161 time-stamp.
-
-### As a library
+### From Go
 
 ```sh
 go get github.com/Nyasa-Parikh-17/c2paseal
@@ -80,159 +88,100 @@ chain, key, err := c2paseal.LoadSigner("chain.pem", "key.pem")
 if err != nil {
 	log.Fatal(err)
 }
-err = c2paseal.Sign("in.jpg", "out.jpg", &c2paseal.SignOptions{Chain: chain, Signer: key})
+if err := c2paseal.Sign("in.jpg", "out.jpg", &c2paseal.SignOptions{Chain: chain, Signer: key}); err != nil {
+	log.Fatal(err)
+}
+
+anchors, err := c2paseal.LoadTrustAnchors("C2PA-TRUST-LIST.pem")
 if err != nil {
 	log.Fatal(err)
 }
-anchors, err := c2paseal.LoadTrustAnchors("roots.pem")
-if err != nil {
-	log.Fatal(err)
-}
-result := c2paseal.VerifyFile("out.jpg", &c2paseal.VerifyOptions{TrustAnchors: anchors})
-fmt.Println(result.State()) // Invalid, Valid or Trusted
+res := c2paseal.VerifyFile("out.jpg", &c2paseal.VerifyOptions{TrustAnchors: anchors})
+fmt.Println(res.State()) // Invalid, Valid or Trusted
 ```
 
-Runnable examples: `go doc -ex github.com/Nyasa-Parikh-17/c2paseal Sign`
-(also `Read`, `Verify`, `VerifyFile`), or the package page on pkg.go.dev.
-
-### Keys in a KMS
-
-The signing key can be named by a URI instead of a file, so it does not
-have to sit on disk:
+### Sign uploads in a Go service
 
 ```go
-import _ "github.com/Nyasa-Parikh-17/c2paseal/keys/awskms" // or keys/gcpkms
-
-signer, err := sign.OpenKey(ctx, "awskms:arn:aws:kms:eu-west-1:111122223333:key/…")
-chain, err := c2paseal.LoadChain("chain.pem")
-err = c2paseal.Sign("in.jpg", "out.jpg", &c2paseal.SignOptions{Chain: chain, Signer: signer})
+signer, _ := sign.OpenKey(ctx, "awskms:arn:aws:kms:…") // or "file:key.pem"
+chain, _ := c2paseal.LoadChain("chain.pem")
+signUploads, _ := middleware.Sign(middleware.Config{Options: &sign.Options{Chain: chain, Signer: signer}})
+http.Handle("POST /upload", signUploads(uploadHandler)) // the handler receives signed images
 ```
 
-- `file:` (and plain paths) are built in.
-- `awskms:` and `gcpkms:` are in their own Go modules,
-  [keys/awskms](keys/awskms) and [keys/gcpkms](keys/gcpkms), so the cloud
-  SDKs are not dependencies of this module.
-- Any other store can implement `sign.KeyProvider`; a plain
-  `crypto.Signer` also works as `SignOptions.Signer`.
-- The CLI's `sign --key` takes a file or a `file:` URI. KMS keys need a
-  program that imports the provider.
-- There is no PKCS #11: its Go bindings need CGO.
+### Check images in CI
 
-### As a signing service
-
-[sealsvc](cmd/sealsvc) is a small HTTP service around the library:
-
-- `POST /v1/sign` (image in, signed image out) and `POST /v1/verify`;
-- API keys, rate limits, a JSON audit log and Prometheus metrics;
-- signing keys from a file or a KMS.
-
-It ships as a distroless container image,
-`ghcr.io/nyasa-parikh-17/c2paseal/sealsvc`. There is a compose example in
-[deploy/sealsvc](deploy/sealsvc/compose.yaml).
-
-### Invisible watermark
-
-[watermark](watermark) embeds an invisible 64-bit ID in a JPEG or PNG and
-reads it back from JPEG, PNG or WebP copies. It is its own module, written
-in pure Go. It survives re-compression, resizing and colour changes, but
-not cropping; [ROBUSTNESS.md](watermark/ROBUSTNESS.md) has the measured
-results, failures included.
-
-The ID is how a stripped copy finds its way back to its manifest:
-
-- `sign.Options.SoftBindings` records it in a `c2pa.soft-binding`
-  assertion.
-- [sealstore](cmd/sealstore) is a self-hosted manifest store keyed by the
-  ID.
-- `sealstore recover`, or the web app's "Recover credentials" tab, reads
-  the watermark from a copy, fetches the manifest and verifies it against
-  the copy.
-
-### In the browser (WebAssembly)
-
-`cmd/c2paseal-wasm` is the same library built for browsers with
-`GOOS=js GOARCH=wasm` (about 3.7 MB gzipped; CI keeps it under 4 MiB). It
-defines `globalThis.c2paseal` with `verify(bytes, opts)` and
-`sign(bytes, opts)`, which return JSON in the shape of the CLI's
-`verify --json` and `sign --json`:
-
-```sh
-cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm .
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" .
+```yaml
+- uses: Nyasa-Parikh-17/c2paseal@v0.7.0
+  with:
+    command: verify
+    files: assets/**/*.jpg
+    trust: .github/c2pa-trust-list.pem
 ```
 
-```js
-const go = new Go(); // from wasm_exec.js
-const { instance } = await WebAssembly.instantiateStreaming(fetch("c2paseal.wasm"), go.importObject);
-go.run(instance);
-const result = JSON.parse(c2paseal.verify(bytes, { trustAnchors: pemText }));
-console.log(result.validation_state); // Invalid, Valid or Trusted
-```
+More in [examples/](examples): an upload server, a folder checker, and
+watermark recovery.
 
-Files stay in the page; the browser build makes no network requests, so it
-has no time-stamping, remote manifests or online OCSP. The options are in
-`go doc ./cmd/c2paseal-wasm`, which also documents `analyze(bytes, opts)`,
-the JSON the web app displays.
+## Supported formats
 
-The web app is the static site in `web/site`. The `pages` workflow deploys
-it with `c2paseal.wasm` and `wasm_exec.js`; `c2paseal serve` embeds the
-same site and, having no `.wasm`, answers its requests through an HTTP API
-that returns the same JSON. `ParseSigner`, `ParseTrustAnchors`,
-`ParseAllowedList` and `ParseTrustConfig` are the byte-level versions of the
-`Load*` functions, for code without files.
+| Format | Manifest location | Hard binding | Read | Verify | Sign |
+|---|---|---|---|---|---|
+| JPEG | APP11 segments | `c2pa.hash.data` | ✓ | ✓ | ✓ |
+| PNG | `caBX` chunk | `c2pa.hash.data` | ✓ | ✓ | ✓ |
+| WebP | RIFF `C2PA` chunk | `c2pa.hash.data` | ✓ | ✓ | ✓ |
+| HEIC / HEIF | ISO BMFF `uuid` box | `c2pa.hash.bmff.v3` | ✓ | ✓ | ✓ |
+| AVIF | ISO BMFF `uuid` box | `c2pa.hash.bmff.v3` | ✓ | ✓ | ✓ |
 
-## Scope
+- **Signs** ES256 with claim v2.
+- **Verifies** ES256/384/512, PS256/384/512 and Ed25519, and C2PA 1.x
+  files.
+- **Supports** time-stamps, OCSP, trust lists, edit history (the parent
+  ingredient), sidecar and remote manifests, and soft bindings.
+- **Targets** C2PA 2.4, pinned in [SPEC.md](SPEC.md).
 
-| Area | Supported |
+Details and known limits: [Formats and scope](docs/formats.md).
+
+## What a signature proves
+
+A **Trusted** result means a certificate holder on your trust list signed
+the file, and neither the picture nor the manifest has changed since. It
+does **not** mean the picture is true: C2PA records what the signer
+claims. Read
+[what C2PA does and does not prove](docs/what-c2pa-proves.md) before you
+rely on it.
+
+> **The test certificates in `testdata/pki` are TEST ONLY.** Their private
+> keys are public, so anything signed with them proves nothing. For real
+> use you need a certificate from a CA on the C2PA trust list; see
+> [Certificates and trust](docs/certificates.md).
+
+## Repository layout
+
+| Path | |
 |---|---|
-| Formats | JPEG (APP11 / JPEG XT), PNG (`caBX`), WebP (RIFF `C2PA` chunk), HEIC and AVIF (ISO BMFF C2PA `uuid` box) |
-| Operations | Read, verify, sign |
-| Signature | Signing: ES256 (ECDSA P-256, SHA-256). Verifying: also ES384, ES512, PS256, PS384, PS512 and Ed25519 |
-| Claims | Writes claim v2; reads claim v2 and C2PA 1.x claim v1 (`c2pa.claim`) |
-| Hard binding | `c2pa.hash.data`; `c2pa.hash.bmff.v3` for HEIC and AVIF (v2 and v1 are verified too) |
-| Assertions written | `c2pa.actions.v2` (`c2pa.created`, or `c2pa.opened` when re-signing, plus later actions), `c2pa.hash.data`, `c2pa.ingredient.v3` for the parent when re-signing, optional `c2pa.thumbnail.claim` |
-| Edit history | Re-signing keeps the earlier manifests byte for byte and records the previous one as the parent ingredient |
-| Manifest location | Embedded, in a `.c2pa` sidecar (`--sidecar`), or at a remote URL referenced from XMP (`--remote`); `verify` finds sidecars itself and fetches remote stores only with `--fetch-remote` |
-| Trust | PEM trust lists (such as the official C2PA ones), allowed end-entity lists, extra EKUs (`--allowed-list`, `--trust-config`), as c2patool |
-| Revocation | OCSP: stapled responses are read; online checks with `--fetch-ocsp`; `sign --ocsp` staples one |
-| Time-stamps | RFC 3161 `sigTst2` (and 1.x `sigTst`), verified when present, optional when signing; the CMS `signingTime` attribute is used when present, as c2pa-rs does |
-| Specification | C2PA 2.4, pinned in [SPEC.md](SPEC.md) |
+| `c2paseal.go`, `sign/`, `verify/`, `manifest/`, `container/` | The core module: the library |
+| `middleware/` | HTTP middleware that signs uploads |
+| `cmd/c2paseal/` | The CLI |
+| `action.yml`, `internal/cmd/ghaction/` | The GitHub Action |
+| `keys/awskms/`, `keys/gcpkms/` | KMS key providers (separate modules) |
+| `cmd/sealsvc/` | Signing service (separate module) |
+| `watermark/`, `cmd/sealstore/` | Watermark and manifest store (separate modules) |
+| `cmd/c2paseal-wasm/`, `web/` | WebAssembly build and web app |
+| `examples/` | Runnable examples (separate module) |
+| `docs/` | The documentation site's source |
+| `testdata/`, `interop/` | Fixtures with `c2patool`'s output, and the cross-tool harness |
 
-## Limits
+## Project status
 
-- **The test certificates are untrusted.** `testdata/pki` is a TEST ONLY PKI
-  whose private keys are public. Files signed with it prove nothing and show
-  `signingCredential.untrusted` unless you pass its root as a trust anchor.
-  For real use you need a certificate from a CA on the C2PA trust list.
-- **JPEG, PNG, WebP, HEIC and AVIF only.** No video or other formats yet.
-- HEIC and AVIF: no remote manifest references (C2paSeal does not write
-  XMP into ISO BMFF files yet), no update manifests, and fragmented files'
-  Merkle hashes are not verified.
-- **Signing is ES256 only.** Verifying also accepts ES384, ES512, PS256,
-  PS384, PS512 and Ed25519.
-- **Hard bindings:** `c2pa.hash.data` and `c2pa.hash.bmff`. No soft
-  bindings or watermarks.
-- Revocation is OCSP for the signer only: no CRLs, and no checks of
-  time-stamp authorities or intermediates.
-- C2PA 1.x files are read and verified, not written. Stores written before
-  C2PA 1.0 are refused, as c2patool refuses them.
-- Re-signing keeps the existing manifests and records the previous one as
-  the parent ingredient (`--no-history` replaces them instead). Only the
-  parent relationship is written; no component ingredients, no ingredient
-  thumbnails, no auto-generated thumbnails.
-- A sidecar is `<name>.c2pa` next to the file, as the spec says, so
-  `photo.jpg` and `photo.png` in one folder would share one sidecar path;
-  give them different names.
-- A time-stamped file reserves about 10 KiB for the token, whatever its real
-  size. Without a time-stamp, validators check the certificate against the
-  current time.
+C2paSeal is at **v0.7**. Images are complete for the agreed scope; video
+(MP4/MOV) comes next, then v1.0.0 and the API freeze.
 
-## More
-
-- [INTEROP.md](INTEROP.md): results of C2paSeal, `c2patool` and `c2pa-mcp`
-  on the corpus and on C2paSeal's own signed files, with the cause of every
-  disagreement. Regenerate it with `go run ./interop`.
-- [PROGRESS.md](PROGRESS.md): design notes and the build log.
-- `testdata/`: fixtures and the `c2patool` output they are checked against.
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release.
+- [PENDING_APPROVAL.md](PENDING_APPROVAL.md): image features proposed but
+  not yet approved.
+- [FUTURE_SCOPE.md](FUTURE_SCOPE.md): longer-term directions.
+- [PHASES.md](PHASES.md) and [PROGRESS.md](PROGRESS.md): the plan, and the
+  build log with test results for every phase.
+- [RELEASING.md](RELEASING.md): how releases are made.
 
 Licensed under the [Apache License 2.0](LICENSE).

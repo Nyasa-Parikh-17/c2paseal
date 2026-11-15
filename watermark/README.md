@@ -8,14 +8,22 @@ module does not.
 
 ```go
 id, _ := watermark.NewID()
-marked, err := watermark.EmbedFile(jpegBytes, id, nil) // re-encoded, JPEG quality 95
-// ... sign `marked` with C2paSeal (watermark first: the mark changes pixels) ...
+marked, err := wmfile.EmbedFile(jpegBytes, id, nil) // re-encoded, JPEG quality 95
+// ... sign `marked` with C2paSeal (watermark first: the mark changes pixels),
+// recording id in a c2pa.soft-binding (alg watermark.SoftBindingAlg) ...
 
-r, err := watermark.ExtractFile(someCopy) // JPEG, PNG or WebP
+r, err := wmfile.ExtractFile(someCopy) // JPEG, PNG or WebP
 if err == nil {
 	fmt.Println(r.ID, r.Confidence)
 }
 ```
+
+There are two packages. `watermark` is the algorithm (`Embed` and `Extract`
+on an `image.Image`), standard library only. `watermark/wmfile` reads and
+writes files, using `golang.org/x/image` for WebP. The WebAssembly build
+links only the first, because the browser decodes the image itself.
+[sealstore](../cmd/sealstore) puts it all together: watermark, sign, store,
+recover.
 
 **How it works:**
 - The luminance is resampled to 512×512.

@@ -20,6 +20,7 @@ const (
 	LabelBMFFHash       = "c2pa.hash.bmff" // version 1; also .v2 and .v3
 	LabelBMFFHashV2     = "c2pa.hash.bmff.v2"
 	LabelBMFFHashV3     = "c2pa.hash.bmff.v3"
+	LabelSoftBinding    = "c2pa.soft-binding"
 	LabelCreativeWork   = "stds.schema-org.CreativeWork"
 	LabelThumbnailClaim = "c2pa.thumbnail.claim" // optionally followed by ".jpeg", ".png", …
 	LabelThumbnailIngr  = "c2pa.thumbnail.ingredient"
@@ -34,7 +35,7 @@ type Assertion struct {
 	Box   *jumbf.Box // the assertion superbox, with its original bytes
 
 	// Value is the decoded content for in-scope labels: *Actions, *DataHash,
-	// *BMFFHash, CreativeWork or *Thumbnail. It is nil for other labels, whose content
+	// *BMFFHash, *SoftBinding, CreativeWork or *Thumbnail. It is nil for other labels, whose content
 	// stays available through Box.
 	Value any
 	// Err is set when an in-scope assertion could not be decoded.
@@ -68,6 +69,11 @@ func Decode(box *jumbf.Box) Assertion {
 		}
 	case IsBMFFHash(base):
 		var v BMFFHash
+		if err = decodeCBOR(box, &v); err == nil {
+			a.Value = &v
+		}
+	case base == LabelSoftBinding:
+		var v SoftBinding
 		if err = decodeCBOR(box, &v); err == nil {
 			a.Value = &v
 		}

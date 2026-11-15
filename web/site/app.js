@@ -65,8 +65,8 @@ async function wasmEngine() {
   go.run(instance); // defines globalThis.c2paseal and keeps running
   if (typeof globalThis.c2paseal !== "object") throw new Error("c2paseal.wasm did not start");
   const api = globalThis.c2paseal;
-  const analyzeBytes = async (bytes, name, trust) =>
-    JSON.parse(api.analyze(bytes, { name, trustAnchors: trust ? await demoFile("demo-root.pem") : "" }));
+  const analyzeBytes = async (bytes, name, trust, manifestStore) =>
+    JSON.parse(api.analyze(bytes, { name, trustAnchors: trust ? await demoFile("demo-root.pem") : "", manifestStore }));
   return {
     mode: "wasm",
     where: "Everything runs in this browser tab (WebAssembly). Files are not uploaded. After the first visit the app also works offline.",
@@ -82,7 +82,46 @@ async function wasmEngine() {
       a.signed = { name, data: r.data };
       return a;
     },
+    // recover reads the watermark from the decoded pixels, fetches the
+    // manifest store for its ID and verifies the file against it.
+    async recover(file, storeURL, trust) {
+      const fileBytes = new Uint8Array(await file.arrayBuffer());
+      let px;
+      try {
+        px = await pixels(file);
+      } catch (e) {
+        return { error: "This browser could not decode the image: " + e.message };
+      }
+      const wm = JSON.parse(api.extractWatermark(px.data, px.width, px.height));
+      if (wm.error) return { noWatermark: true, file: file.name, detail: wm.error };
+      const url = storeURL.replace(/\/+$/, "") + "/v1/manifests/" + wm.id;
+      let r;
+      try {
+        r = await fetch(url);
+      } catch (e) {
+        return { error: "Could not reach the manifest store at " + storeURL + " (" + e.message + ")." };
+      }
+      if (r.status === 404) return { error: "The manifest store has no credentials for watermark " + wm.id + "." };
+      if (!r.ok) return { error: "The manifest store answered " + r.status + "." };
+      const store = new Uint8Array(await r.arrayBuffer());
+      const a = await analyzeBytes(fileBytes, file.name, trust, store);
+      a.recovered = { id: wm.id, confidence: wm.confidence, store: storeURL };
+      return a;
+    },
   };
+}
+
+// pixels decodes an image file in the browser and returns its RGBA bytes,
+// without colour management, as the watermark was embedded.
+async function pixels(file) {
+  const bmp = await createImageBitmap(file, { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+  const canvas = document.createElement("canvas");
+  canvas.width = bmp.width;
+  canvas.height = bmp.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(bmp, 0, 0);
+  const d = ctx.getImageData(0, 0, bmp.width, bmp.height);
+  return { data: new Uint8Array(d.data.buffer), width: bmp.width, height: bmp.height };
 }
 
 function serverEngine() {
@@ -149,8 +188,40 @@ function signedBy(m) {
   return "Signed by " + who + issuer + ", " + since;
 }
 
+// recoveredBanner describes credentials found by watermark. The copy's
+// bytes are not the signed file's, so the hard binding fails by design;
+// what counts is that the signature validates and nothing else fails.
+function recoveredBanner(a) {
+  const m = activeManifest(a);
+  const failures = (a.statuses || []).filter((s) => s.kind === "failure");
+  const expected = new Set(["assertion.dataHash.mismatch", "assertion.bmffHash.mismatch", "signingCredential.untrusted"]);
+  const validated = (a.statuses || []).some((s) => s.code === "claimSignature.validated");
+  const other = failures.find((s) => !expected.has(s.code));
+  if (!m || !validated || other) {
+    return { cls: "invalid", title: "Recovered credentials not valid",
+      text: "The manifest store returned credentials for watermark " + a.recovered.id + ", but they do not validate." +
+        (other ? " First problem: " + (other.explanation || other.code) + "." : "") };
+  }
+  const sig = m.signature || {};
+  const who = sig.common_name || sig.issuer || "an unnamed signer";
+  const issuer = sig.issuer && sig.issuer !== who ? " (certificate issued by " + sig.issuer + ")" : "";
+  const when = sig.time ? " at " + formatTime(sig.time) + " (time-stamp)" : "";
+  const changed = failures.some((s) => s.code.endsWith("Hash.mismatch"))
+    ? " This copy is not the signed file: its bytes changed since signing (re-encoded, resized or edited), so only its watermark links it to these credentials."
+    : " This copy matches the signed file.";
+  const trust = failures.some(isUntrusted) ? " The signer is not on your trust list." : "";
+  return { cls: "recovered", title: "Credentials recovered",
+    text: "Signed by " + who + issuer + when + "; the signature is valid." + changed + trust +
+      " Watermark " + a.recovered.id + " (confidence " + a.recovered.confidence.toFixed(2) + ")." };
+}
+
 // banner returns {cls, title, text} for the status banner.
 function banner(a) {
+  if (a.recovered) return recoveredBanner(a);
+  if (a.noWatermark) {
+    return { cls: "none", title: "No watermark found",
+      text: "This copy carries no C2paSeal watermark, or it was cropped or changed too much to read (see ROBUSTNESS.md)." };
+  }
   if (noCredentials(a)) {
     return { cls: "none", title: "No Content Credentials",
       text: "This file has no C2PA manifest, so there is nothing to check. Most images have none; that alone is not a sign of tampering." };
@@ -250,7 +321,8 @@ function render(target, a) {
     target.replaceChildren(panel);
     return;
   }
-  panel.append(el("div", "meta", [a.file, a.format || "unknown format", a.size + " bytes", a.trusted_test_root ? "demo root trusted" : ""].filter(Boolean).join(" · ")));
+  panel.append(el("div", "meta", [a.file, a.format || "", a.size ? a.size + " bytes" : "", a.trusted_test_root ? "demo root trusted" : "",
+    a.recovered ? "from " + a.recovered.store : ""].filter(Boolean).join(" · ")));
 
   const b = banner(a);
   const box = el("div", "status " + b.cls);
@@ -314,6 +386,7 @@ let engine = null;
 let idle = Promise.resolve();
 let lastVerify = null; // the File on the Verify tab
 let lastSign = null;   // the File signed on the Sign tab
+let lastRecover = null; // the File on the Recover tab
 
 function run(busyId, fn) {
   idle = (async () => {
@@ -351,13 +424,41 @@ function signFile(getFile) {
   });
 }
 
+function recoverFile(file) {
+  lastRecover = file;
+  const store = $("store-url").value.trim();
+  return run("busy-recover", async () => {
+    if (!/^https?:\/\//.test(store)) {
+      render($("result-recover"), { error: "Enter the manifest store URL first (http:// or https://)." });
+      return;
+    }
+    render($("result-recover"), await engine.recover(file, store, $("recover-trust").checked));
+  });
+}
+
+// The store URL is remembered in this browser (a convenience; nothing
+// depends on it), and can be preset with ?store=<url>.
+function initStoreURL() {
+  const q = new URLSearchParams(location.search).get("store");
+  let saved = "";
+  try {
+    saved = localStorage.getItem("c2paseal.store") || "";
+  } catch (e) { /* storage unavailable */ }
+  $("store-url").value = q || saved;
+  $("store-url").addEventListener("change", () => {
+    try {
+      localStorage.setItem("c2paseal.store", $("store-url").value.trim());
+    } catch (e) { /* storage unavailable */ }
+  });
+}
+
 async function sampleFile() {
   const r = await fetch("demo/sample.jpg");
   return new File([await r.blob()], "sample.jpg", { type: "image/jpeg" });
 }
 
 function selectTab(name) {
-  for (const t of ["verify", "sign"]) {
+  for (const t of ["verify", "sign", "recover"]) {
     const on = t === name;
     $("tab-" + t).setAttribute("aria-selected", String(on));
     $("tab-" + t).tabIndex = on ? 0 : -1;
@@ -368,9 +469,12 @@ function selectTab(name) {
 function wire() {
   $("tab-verify").addEventListener("click", () => selectTab("verify"));
   $("tab-sign").addEventListener("click", () => selectTab("sign"));
+  $("tab-recover").addEventListener("click", () => selectTab("recover"));
   document.querySelector(".tabs").addEventListener("keydown", (e) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    const next = $("tab-verify").getAttribute("aria-selected") === "true" ? "sign" : "verify";
+    const tabs = ["verify", "sign", "recover"];
+    const cur = tabs.findIndex((t) => $("tab-" + t).getAttribute("aria-selected") === "true");
+    const next = tabs[(cur + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
     selectTab(next);
     $("tab-" + next).focus();
   });
@@ -391,6 +495,17 @@ function wire() {
     const f = e.target.files[0];
     if (f) signFile(() => f);
   });
+  $("recover-file").addEventListener("change", (e) => { if (e.target.files[0]) recoverFile(e.target.files[0]); });
+  const rdrop = $("recover-drop");
+  rdrop.addEventListener("dragover", (e) => { e.preventDefault(); rdrop.classList.add("over"); });
+  rdrop.addEventListener("dragleave", () => rdrop.classList.remove("over"));
+  rdrop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    rdrop.classList.remove("over");
+    if (engine && engine.recover && e.dataTransfer.files[0]) recoverFile(e.dataTransfer.files[0]);
+  });
+  $("recover-trust").addEventListener("change", () => { if (lastRecover) recoverFile(lastRecover); });
+  initStoreURL();
   $("sign-trust").addEventListener("change", () => {
     const f = lastSign;
     if (f) signFile(() => f);
@@ -408,6 +523,13 @@ async function start() {
   }
   $("where").textContent = engine.where;
   for (const id of ["file", "sign-sample", "sign-file"]) $(id).disabled = false;
+  if (engine.recover) {
+    $("recover-file").disabled = false;
+  } else {
+    $("recover-note").hidden = false;
+    $("recover-note").textContent = "Recovering credentials reads the watermark with the WebAssembly build, which this page does not have here. " +
+      "Use the GitHub Pages site, or `sealstore recover` on the command line.";
+  }
   if (engine.mode === "wasm" && "serviceWorker" in navigator) {
     // Caches the app, including c2paseal.wasm, for offline use.
     navigator.serviceWorker.register("sw.js").catch((e) => console.warn("service worker:", e));

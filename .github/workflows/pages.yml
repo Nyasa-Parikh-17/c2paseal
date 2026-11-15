@@ -31,12 +31,13 @@ jobs:
       - name: Test the app in headless Chrome
         env:
           C2PASEAL_BROWSER_TEST: "1"
-        run: go test -run 'TestWasmSize|TestBrowser|TestSite' ./cmd/c2paseal-wasm
+        working-directory: cmd/c2paseal-wasm
+        run: go test -run 'TestWasmSize|TestBrowser|TestSite' ./...
       - name: Assemble the site
         run: |
           mkdir -p _site
           cp -r web/site/. _site/
-          GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o _site/c2paseal.wasm ./cmd/c2paseal-wasm
+          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../_site/c2paseal.wasm .)
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/
           # A new cache name per deployment, so browsers replace the old one.
           version="${GITHUB_SHA::12}"

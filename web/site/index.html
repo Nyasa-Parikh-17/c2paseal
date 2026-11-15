@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="description" content="Check and add C2PA Content Credentials in JPEG, PNG, WebP, HEIC and AVIF files. Files stay in your browser.">
 <title>C2paSeal</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -21,6 +21,7 @@
   <nav class="tabs" role="tablist" aria-label="Mode">
     <button role="tab" id="tab-verify" aria-controls="pane-verify" aria-selected="true">Verify a file</button>
     <button role="tab" id="tab-sign" aria-controls="pane-sign" aria-selected="false" tabindex="-1">Sign a sample</button>
+    <button role="tab" id="tab-recover" aria-controls="pane-recover" aria-selected="false" tabindex="-1">Recover credentials</button>
   </nav>
 
   <section id="pane-verify" role="tabpanel" aria-labelledby="tab-verify">
@@ -55,6 +56,26 @@
       </div>
     </div>
     <div id="result-sign"></div>
+  </section>
+
+  <section id="pane-recover" role="tabpanel" aria-labelledby="tab-recover" hidden>
+    <p>For a copy whose Content Credentials were stripped: if it carries a C2paSeal watermark, its ID finds the
+      manifest in a manifest store (<code>sealstore</code>), which is then verified against this copy.
+      The image is decoded here; only the watermark ID is sent to the store.</p>
+    <div class="controls">
+      <label class="store">Manifest store URL
+        <input type="url" id="store-url" placeholder="https://store.example.com" autocomplete="url" spellcheck="false"></label>
+    </div>
+    <label class="drop" id="recover-drop">
+      <input type="file" id="recover-file" accept="image/jpeg,image/png,image/webp" disabled>
+      <strong>Drop a JPEG, PNG or WebP copy here</strong> or click to choose one
+    </label>
+    <div class="controls">
+      <label><input type="checkbox" id="recover-trust"> Also trust the TEST ONLY demo root</label>
+      <span class="busy" id="busy-recover" aria-live="polite"></span>
+    </div>
+    <p class="note" id="recover-note" hidden></p>
+    <div id="result-recover"></div>
   </section>
 
   <footer>

@@ -40,6 +40,12 @@ import (
 	mrand "math/rand/v2"
 )
 
+// SoftBindingAlg is the algorithm name recorded in a c2pa.soft-binding
+// assertion whose value is a watermark ID (ID.String()). It is an
+// entity-specific name; the algorithm is not on the C2PA soft binding
+// algorithm list.
+const SoftBindingAlg = "io.github.nyasa-parikh-17.c2paseal.watermark.1"
+
 // ID is the 64-bit value a watermark carries.
 type ID uint64
 

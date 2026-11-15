@@ -3,9 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +19,10 @@ import (
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/sign"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark/wmfile"
 	"github.com/Nyasa-Parikh-17/c2paseal/web"
 )
 
@@ -104,6 +109,22 @@ func TestSite(t *testing.T) {
 			t.Errorf("mode %q, where %q; want the WebAssembly engine", rep.Mode, rep.Where)
 		}
 		checkSite(t, rep, anchors)
+		t.Run("recover", func(t *testing.T) {
+			if rep.RecoverOff || rep.RecoverNote != "" {
+				t.Fatalf("recover disabled (%q)", rep.RecoverNote)
+			}
+			r := rep.Recover
+			if r.State != "recovered" || r.Title != "Credentials recovered" || !strings.Contains(r.Text, rep.recoverID) ||
+				!strings.Contains(r.Text, "the signature is valid") || !strings.Contains(r.Text, "changed since signing") || !r.RawJSON {
+				t.Errorf("recover: %+v", r)
+			}
+			if m := spin.FindString(r.VisibleText); m != "" {
+				t.Errorf("page says %q", m)
+			}
+			if rep.RecoverNone.State != "none" || rep.RecoverNone.Title != "No watermark found" {
+				t.Errorf("unmarked copy: %+v", rep.RecoverNone)
+			}
+		})
 		t.Run("offline", func(t *testing.T) {
 			if !rep.Controlled {
 				t.Fatal("the service worker never controlled the app")
@@ -134,7 +155,49 @@ func TestSite(t *testing.T) {
 			t.Errorf("mode %q, where %q; want the HTTP API engine", rep.Mode, rep.Where)
 		}
 		checkSite(t, rep, anchors)
+		if !rep.RecoverOff || !strings.Contains(rep.RecoverNote, "sealstore recover") {
+			t.Errorf("serve: recover should be off with a note; disabled %v, note %q", rep.RecoverOff, rep.RecoverNote)
+		}
 	})
+}
+
+// recoverSample is a watermarked, signed photo, its manifest store, and a
+// copy re-encoded as JPEG 80, which drops the manifest.
+type recoverSample struct {
+	id    watermark.ID
+	store []byte
+	copy  []byte
+}
+
+func recoverFixture(t *testing.T) *recoverSample {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("..", "..", "watermark", "testdata", "IMG_0003.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := watermark.ID(0xC2FA5EA1BADC0DE5)
+	marked, err := wmfile.EmbedFile(src, id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain, key, err := c2paseal.LoadSigner(filepath.Join(td, "pki", "leaf-chain.pem"), filepath.Join(td, "pki", "leaf.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := c2paseal.SignAsset(marked, &c2paseal.SignOptions{Chain: chain, Signer: key,
+		SoftBindings: []sign.SoftBinding{{Alg: watermark.SoftBindingAlg, Value: id.String()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, _, err := wmfile.Decode(signed.File)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatal(err)
+	}
+	return &recoverSample{id: id, store: signed.Store, copy: buf.Bytes()}
 }
 
 type siteReport struct {
@@ -144,6 +207,10 @@ type siteReport struct {
 	Verify         []shown `json:"verify"`
 	Sign           []shown `json:"sign"`
 	SignTabVisible bool    `json:"signTabVisible"`
+	RecoverNote    string  `json:"recoverNote"`
+	RecoverOff     bool    `json:"recoverDisabled"`
+	Recover        shown   `json:"recover"`
+	RecoverNone    shown   `json:"recoverNone"`
 	Controlled     bool    `json:"controlled"`
 	Offline        *struct {
 		Mode   string `json:"mode"`
@@ -151,7 +218,8 @@ type siteReport struct {
 		Sign   shown  `json:"sign"`
 	} `json:"offline"`
 
-	servedOffline int64 // app requests the server answered while "off"
+	servedOffline int64  // app requests the server answered while "off"
+	recoverID     string // the watermark ID of the recovery sample
 }
 
 // runSite serves app under /app/ (as GitHub Pages serves the site under
@@ -162,7 +230,9 @@ func runSite(t *testing.T, chrome string, app http.Handler, offline bool) *siteR
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases, _ := json.Marshal(map[string]any{"verify": siteCases, "offline": siteCases[1]})
+	rec := recoverFixture(t)
+	cases, _ := json.Marshal(map[string]any{"verify": siteCases, "offline": siteCases[1],
+		"recover": map[string]string{"file": "/__test/recover.jpg", "store": "/__test/store"}})
 	var off atomic.Bool
 	var servedOffline atomic.Int64
 	got := make(chan siteReport, 1)
@@ -184,6 +254,15 @@ func runSite(t *testing.T, chrome string, app http.Handler, offline bool) *siteR
 		w.Write(cases)
 	})
 	mux.Handle("GET /__test/f/", http.StripPrefix("/__test/f/", http.FileServer(http.Dir(td))))
+	mux.HandleFunc("GET /__test/recover.jpg", func(w http.ResponseWriter, r *http.Request) { w.Write(rec.copy) })
+	mux.HandleFunc("GET /__test/store/v1/manifests/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != rec.id.String() {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/c2pa")
+		w.Write(rec.store)
+	})
 	mux.HandleFunc("POST /__test/offline", func(w http.ResponseWriter, r *http.Request) { off.Store(true) })
 	mux.HandleFunc("POST /__test/result", func(w http.ResponseWriter, r *http.Request) {
 		var rep siteReport
@@ -215,6 +294,7 @@ func runSite(t *testing.T, chrome string, app http.Handler, offline bool) *siteR
 		t.Fatalf("browser: %s", rep.Error)
 	}
 	rep.servedOffline = servedOffline.Load()
+	rep.recoverID = rec.id.String()
 	return &rep
 }
 

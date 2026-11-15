@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/x509"
 	"encoding/json"
+	"image"
+	"image/draw"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,8 @@ import (
 	"github.com/Nyasa-Parikh-17/c2paseal"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark/wmfile"
 )
 
 const td = "../../testdata"
@@ -199,11 +203,45 @@ func TestAnalyzeJSON(t *testing.T) {
 			pem, a = string(anchorsPEM), anchors
 		}
 		want, _ := json.Marshal(analysis.Analyse("small.jpg", b, a))
-		if got := analyzeJSON(b, "small.jpg", pem); string(got) != string(want) {
+		if got := analyzeJSON(b, "small.jpg", pem, nil); string(got) != string(want) {
 			t.Errorf("trust=%v: analyze() differs from analysis.Analyse:\n got %.300s\nwant %.300s", trust, got, want)
 		}
 	}
-	if e := errorOf(t, analyzeJSON(b, "x", "not PEM")); !strings.HasPrefix(e, "trustAnchors: ") {
+	if e := errorOf(t, analyzeJSON(b, "x", "not PEM", nil)); !strings.HasPrefix(e, "trustAnchors: ") {
 		t.Errorf("bad anchors: %q", e)
+	}
+}
+
+// TestExtractWatermarkJSON: extractWatermark() reads the ID from decoded
+// RGBA pixels, as the browser passes them.
+func TestExtractWatermarkJSON(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "watermark", "testdata", "IMG_0003.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, _, err := wmfile.Decode(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := watermark.ID(0x1122334455667788)
+	marked, err := watermark.Embed(img, id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := marked.Bounds().Dx(), marked.Bounds().Dy()
+	var got struct {
+		ID         string  `json:"id"`
+		Confidence float64 `json:"confidence"`
+	}
+	if err := json.Unmarshal(extractWatermarkJSON(marked.Pix, w, h), &got); err != nil || got.ID != id.String() || got.Confidence < 0.5 {
+		t.Errorf("marked: %+v (%v)", got, err)
+	}
+	plain := image.NewNRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(plain, plain.Bounds(), img, img.Bounds().Min, draw.Src)
+	if e := errorOf(t, extractWatermarkJSON(plain.Pix, w, h)); !strings.Contains(e, "no watermark") {
+		t.Errorf("unmarked: %q", e)
+	}
+	if e := errorOf(t, extractWatermarkJSON(marked.Pix, w+1, h)); !strings.Contains(e, "bytes for") {
+		t.Errorf("wrong size: %q", e)
 	}
 }

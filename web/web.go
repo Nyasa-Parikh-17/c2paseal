@@ -56,7 +56,9 @@ var siteTypes = map[string]string{
 // ContentSecurityPolicy is sent with every page and also set in
 // index.html's meta tag, for hosts that cannot send headers (GitHub Pages).
 // 'wasm-unsafe-eval' lets the page compile c2paseal.wasm and nothing else.
-const ContentSecurityPolicy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'"
+// connect-src allows https: and localhost so "Recover credentials" can
+// fetch from the manifest store the user names.
+const ContentSecurityPolicy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; worker-src 'self'; base-uri 'none'; form-action 'none'"
 
 // MaxUpload is the largest file the demo accepts.
 const MaxUpload = 32 << 20

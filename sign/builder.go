@@ -147,6 +147,25 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 		return nil, err
 	}
 	created = append(created, actionsSup, m.hashSup)
+	for i, sb := range opts.SoftBindings {
+		sbCBOR, err := cbormode.Enc.Marshal(&assertion.SoftBinding{
+			Alg:    sb.Alg,
+			Blocks: []assertion.SoftBindingBlock{{Value: sb.Value}},
+			Pad:    []byte{},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sign: encode soft binding: %w", err)
+		}
+		label := assertion.LabelSoftBinding
+		if i > 0 {
+			label = fmt.Sprintf("%s__%d", label, i)
+		}
+		sup, err := assertionBox(r, label, uuidCBOR, &jumbf.Box{Type: "cbor", Payload: sbCBOR})
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, sup)
+	}
 	var gathered []*jumbf.Box
 	if t := opts.Thumbnail; t != nil {
 		thumb, err := assertionBox(r, labelThumbnail, uuidEmbedded,

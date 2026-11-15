@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/watermark"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark/wmfile"
 	"golang.org/x/image/draw"
 )
 
@@ -223,7 +224,7 @@ func run(files []string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		src, _, err := watermark.Decode(b)
+		src, _, err := wmfile.Decode(b)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f, err)
 		}

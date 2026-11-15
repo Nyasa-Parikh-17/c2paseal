@@ -6,6 +6,8 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	_ "image/png"
+	"math"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -20,7 +22,7 @@ func load(t testing.TB, name string) image.Image {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, _, err := Decode(b)
+	img, _, err := image.Decode(bytes.NewReader(b))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,39 +108,8 @@ func TestNoFalsePositives(t *testing.T) {
 	}
 }
 
-func TestFilesAndErrors(t *testing.T) {
-	jpg, err := os.ReadFile(filepath.Join("testdata", "IMG_0003.jpg"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := NewID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := EmbedFile(jpg, id, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r, err := ExtractFile(out); err != nil || r.ID != id {
-		t.Errorf("JPEG file: %v, %s", err, r.ID)
-	}
-	pngIn, _ := os.ReadFile(filepath.Join("testdata", "sample1.png"))
-	if out, err := EmbedFile(pngIn, id, &Options{Strength: 36}); err != nil {
-		t.Error(err)
-	} else if _, format, _ := Decode(out); format != "png" {
-		t.Errorf("PNG in, %s out", format)
-	}
-	// WebP is read (here an unmarked one from the core fixtures), not written.
-	webp, err := os.ReadFile(filepath.Join("..", "testdata", "unsigned", "large.webp"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ExtractFile(webp); !errors.Is(err, ErrNotFound) {
-		t.Errorf("unmarked WebP: %v", err)
-	}
-	if _, err := EmbedFile(webp, id, nil); !errors.Is(err, ErrNoEncoder) {
-		t.Errorf("EmbedFile on WebP: %v", err)
-	}
+func TestErrors(t *testing.T) {
+	id := ID(42)
 	small := image.NewNRGBA(image.Rect(0, 0, 100, 300))
 	if _, err := Embed(small, id, nil); !errors.Is(err, ErrTooSmall) {
 		t.Errorf("small: %v", err)
@@ -146,13 +117,14 @@ func TestFilesAndErrors(t *testing.T) {
 	if _, err := Extract(small); !errors.Is(err, ErrTooSmall) {
 		t.Errorf("small extract: %v", err)
 	}
-	if _, _, err := Decode([]byte("not an image")); err == nil {
-		t.Error("Decode of garbage succeeded")
+	if _, err := BitErrors(small, id); !errors.Is(err, ErrTooSmall) {
+		t.Errorf("small BitErrors: %v", err)
 	}
-	if _, err := Encode(small, "webp"); !errors.Is(err, ErrNoEncoder) {
-		t.Errorf("Encode webp: %v", err)
+	n, err := NewID()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, err := ParseID(id.String()); err != nil || got != id {
+	if got, err := ParseID(n.String()); err != nil || got != n {
 		t.Errorf("ParseID(String()) = %s, %v", got, err)
 	}
 	for _, bad := range []string{"", "123", "zzzzzzzzzzzzzzzz"} {
@@ -160,18 +132,7 @@ func TestFilesAndErrors(t *testing.T) {
 			t.Errorf("ParseID(%q) succeeded", bad)
 		}
 	}
-}
-
-// FuzzExtractFile: decoding and extracting never panic on any input.
-func FuzzExtractFile(f *testing.F) {
-	for _, name := range []string{"earth_apollo17.jpg"} {
-		b, err := os.ReadFile(filepath.Join("testdata", name))
-		if err == nil {
-			f.Add(b)
-		}
+	if p := PSNR(small, small); !math.IsInf(p, 1) {
+		t.Errorf("PSNR of identical images = %v", p)
 	}
-	f.Add([]byte("\x89PNG\r\n\x1a\n"))
-	f.Fuzz(func(t *testing.T, b []byte) {
-		ExtractFile(b)
-	})
 }

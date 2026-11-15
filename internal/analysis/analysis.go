@@ -47,15 +47,28 @@ type SignedFile struct {
 
 // Analyse reads and verifies b with the library. anchors may be nil.
 func Analyse(name string, b []byte, anchors []*x509.Certificate) *Analysis {
+	return AnalyseWith(name, b, anchors, nil)
+}
+
+// AnalyseWith is Analyse with a manifest store kept outside the file (for
+// example one recovered by watermark), which is read and verified against
+// b instead of b's own store.
+func AnalyseWith(name string, b []byte, anchors []*x509.Certificate, store []byte) *Analysis {
 	a := &Analysis{File: name, Size: len(b), Format: c2paseal.DetectFormat(b), Trusted: anchors != nil}
-	if s, err := c2paseal.ReadBytes(b); err != nil {
+	read := func() (*c2paseal.ManifestStore, error) {
+		if store != nil {
+			return c2paseal.ReadStore(store)
+		}
+		return c2paseal.ReadBytes(b)
+	}
+	if s, err := read(); err != nil {
 		a.ReadError = err.Error()
 	} else if j, err := json.Marshal(s); err != nil {
 		a.ReadError = err.Error()
 	} else {
 		a.ManifestStore = j
 	}
-	r := c2paseal.VerifyBytes(b, &c2paseal.VerifyOptions{TrustAnchors: anchors})
+	r := c2paseal.VerifyBytes(b, &c2paseal.VerifyOptions{TrustAnchors: anchors, ManifestStore: store})
 	add := func(scope string, ss []verify.Status) {
 		for _, s := range ss {
 			a.Statuses = append(a.Statuses, StatusView{Scope: scope, Kind: s.Kind().String(), Code: s.Code, URL: s.URL, Explanation: s.Explanation})

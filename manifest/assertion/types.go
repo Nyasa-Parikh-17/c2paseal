@@ -56,6 +56,40 @@ type BMFFHash struct {
 	URL    string          `cbor:"url,omitempty" json:"url,omitempty"` // deprecated remote hash
 }
 
+// SoftBinding is a c2pa.soft-binding assertion: a value computed from the
+// content (a watermark or fingerprint) that can find the manifest again when
+// it has been stripped. Field names follow C2PA 2.4 and c2pa-rs.
+type SoftBinding struct {
+	// Alg names the algorithm, from the C2PA soft binding algorithm list or
+	// an entity-specific name.
+	Alg       string             `cbor:"alg,omitempty" json:"alg,omitempty"`
+	Blocks    []SoftBindingBlock `cbor:"blocks" json:"blocks"`
+	Name      string             `cbor:"name,omitempty" json:"name,omitempty"`
+	AlgParams string             `cbor:"alg-params,omitempty" json:"alg-params,omitempty"`
+	Pad       []byte             `cbor:"pad" json:"pad"`
+	Pad2      []byte             `cbor:"pad2,omitempty" json:"pad2,omitempty"`
+}
+
+// SoftBindingBlock is one soft binding value and where it applies.
+type SoftBindingBlock struct {
+	Scope SoftBindingScope `cbor:"scope" json:"scope"`
+	// Value is in the algorithm's own format.
+	Value string `cbor:"value" json:"value"`
+}
+
+// SoftBindingScope limits a block to a time span or region; empty means the
+// whole asset. A region is kept as CBOR.
+type SoftBindingScope struct {
+	Timespan *SoftBindingTimespan `cbor:"timespan,omitempty" json:"timespan,omitempty"`
+	Region   cbor.RawMessage      `cbor:"region,omitempty" json:"-"`
+}
+
+// SoftBindingTimespan is a time span in a temporal asset.
+type SoftBindingTimespan struct {
+	Start uint64 `cbor:"start" json:"start"`
+	End   uint64 `cbor:"end" json:"end"`
+}
+
 // BMFFExclusion selects boxes left out of a c2pa.hash.bmff hash.
 type BMFFExclusion struct {
 	XPath   string       `cbor:"xpath" json:"xpath"`

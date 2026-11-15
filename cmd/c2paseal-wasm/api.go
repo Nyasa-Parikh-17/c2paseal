@@ -1,8 +1,10 @@
 // Command c2paseal-wasm is C2paSeal compiled to WebAssembly for browsers.
+// It is its own Go module (it links the watermark algorithm); build it from
+// this directory.
 //
 // Build it with
 //
-//	GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm ./cmd/c2paseal-wasm
+//	cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm .
 //
 // and load it with the wasm_exec.js that ships with the same Go version
 // ($(go env GOROOT)/lib/wasm/wasm_exec.js):
@@ -37,7 +39,14 @@
 //	analyze(bytes, opts) → JSON string: the manifest store, the statuses
 //	  with their kinds, and the validation state, as the web app shows them
 //	  (the JSON of `c2paseal serve`'s /api/verify).
-//	  opts: name (string, the file name to report), trustAnchors (PEM string)
+//	  opts: name (string, the file name to report), trustAnchors (PEM string),
+//	  manifestStore (Uint8Array: verify against this store instead of the
+//	  file's own, as when it was recovered by watermark)
+//
+//	extractWatermark(rgba, width, height) → JSON string {"id": "<16 hex>",
+//	  "confidence": n}, or {"error": ...} (no watermark, too small). rgba is
+//	  a Uint8Array of the decoded pixels, 4 bytes each (as canvas
+//	  getImageData gives them): the browser decodes the image.
 //
 //	version() → JSON string, the shape of `c2paseal version --json`
 //
@@ -53,11 +62,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"runtime/debug"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
+	"github.com/Nyasa-Parikh-17/c2paseal/watermark"
 )
 
 // verifyOptions are the options of verify(bytes, opts).
@@ -145,7 +156,7 @@ func signJSON(b []byte, o signOptions) []byte {
 }
 
 // analyzeJSON returns the JSON for analyze(): what the web app shows.
-func analyzeJSON(b []byte, name, trustAnchors string) []byte {
+func analyzeJSON(b []byte, name, trustAnchors string, store []byte) []byte {
 	var anchors []*x509.Certificate
 	if trustAnchors != "" {
 		var err error
@@ -153,7 +164,20 @@ func analyzeJSON(b []byte, name, trustAnchors string) []byte {
 			return errorJSON(fmt.Errorf("trustAnchors: %w", err))
 		}
 	}
-	return marshal(analysis.Analyse(name, b, anchors))
+	return marshal(analysis.AnalyseWith(name, b, anchors, store))
+}
+
+// extractWatermarkJSON reads a watermark from decoded RGBA pixels.
+func extractWatermarkJSON(rgba []byte, w, h int) []byte {
+	if w <= 0 || h <= 0 || len(rgba) != w*h*4 {
+		return errorJSON(fmt.Errorf("extractWatermark: %d bytes for %d×%d pixels", len(rgba), w, h))
+	}
+	img := &image.NRGBA{Pix: rgba, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)}
+	r, err := watermark.Extract(img)
+	if err != nil {
+		return errorJSON(err)
+	}
+	return marshal(map[string]any{"id": r.ID.String(), "confidence": r.Confidence})
 }
 
 // versionJSON returns the JSON for version().

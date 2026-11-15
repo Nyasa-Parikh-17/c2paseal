@@ -59,6 +59,11 @@ type Options struct {
 	// dcterms:provenance: the URL where the manifest store will be served
 	// (C2PA 2.4 §11.5). The store is still embedded unless Sidecar is set.
 	RemoteURL string
+	// SoftBindings, if set, are recorded as one c2pa.soft-binding
+	// assertion per algorithm: a value read from the content itself (such
+	// as a watermark ID) that can find this manifest again in a manifest
+	// store after it has been stripped from a copy.
+	SoftBindings []SoftBinding
 	// Sidecar leaves the manifest store out of the file. Use Asset, which
 	// returns the store, to save it as a .c2pa sidecar or serve it at
 	// RemoteURL. The hard binding then covers the whole file.
@@ -101,6 +106,15 @@ type Options struct {
 }
 
 // Option errors.
+// SoftBinding is one soft binding to record (see Options.SoftBindings).
+type SoftBinding struct {
+	// Alg names the algorithm: from the C2PA soft binding algorithm list,
+	// or an entity-specific reverse-domain name.
+	Alg string
+	// Value is the value read from the content, in the algorithm's format.
+	Value string
+}
+
 var (
 	ErrNoSigner     = errors.New("sign: no signing certificate or key")
 	ErrKeyMismatch  = errors.New("sign: private key does not match the signing certificate")
@@ -109,6 +123,7 @@ var (
 	ErrBadThumbnail = errors.New("sign: thumbnail needs a media type and data")
 	ErrBadTSA       = errors.New("sign: invalid time-stamp options")
 	ErrBadRemote    = errors.New("sign: invalid remote manifest URL")
+	ErrBadSoftBind  = errors.New("sign: invalid soft binding")
 )
 
 func (o *Options) rand() io.Reader {
@@ -168,6 +183,16 @@ func (o *Options) validate(hasParent bool) error {
 
 	if hasParent && o.DigitalSourceType != "" {
 		return fmt.Errorf("%w: %s", ErrBadActions, errHasHistory)
+	}
+	seen := map[string]bool{}
+	for i, sb := range o.SoftBindings {
+		switch {
+		case sb.Alg == "" || sb.Value == "":
+			return fmt.Errorf("%w: soft binding %d needs an algorithm and a value", ErrBadSoftBind, i)
+		case seen[sb.Alg]:
+			return fmt.Errorf("%w: algorithm %q given twice", ErrBadSoftBind, sb.Alg)
+		}
+		seen[sb.Alg] = true
 	}
 	acts := o.actions(hasParent)
 	if len(acts) == 0 {

@@ -136,8 +136,17 @@ It ships as a distroless container image,
 reads it back from JPEG, PNG or WebP copies. It is its own module, written
 in pure Go. It survives re-compression, resizing and colour changes, but
 not cropping; [ROBUSTNESS.md](watermark/ROBUSTNESS.md) has the measured
-results, failures included. The ID is how a stripped copy finds its way
-back to its manifest.
+results, failures included.
+
+The ID is how a stripped copy finds its way back to its manifest:
+
+- `sign.Options.SoftBindings` records it in a `c2pa.soft-binding`
+  assertion.
+- [sealstore](cmd/sealstore) is a self-hosted manifest store keyed by the
+  ID.
+- `sealstore recover`, or the web app's "Recover credentials" tab, reads
+  the watermark from a copy, fetches the manifest and verifies it against
+  the copy.
 
 ### In the browser (WebAssembly)
 
@@ -148,7 +157,7 @@ defines `globalThis.c2paseal` with `verify(bytes, opts)` and
 `verify --json` and `sign --json`:
 
 ```sh
-GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm ./cmd/c2paseal-wasm
+cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o c2paseal.wasm .
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" .
 ```
 

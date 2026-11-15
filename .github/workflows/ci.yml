@@ -57,26 +57,32 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: cmd/c2paseal-wasm/go.mod
+          cache-dependency-path: cmd/c2paseal-wasm/go.sum
+      # cmd/c2paseal-wasm is its own module (it links the watermark).
       - name: Build c2paseal.wasm
         run: |
           mkdir -p dist-wasm
-          GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o dist-wasm/c2paseal.wasm ./cmd/c2paseal-wasm
+          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../dist-wasm/c2paseal.wasm .)
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist-wasm/
           raw=$(wc -c < dist-wasm/c2paseal.wasm); gz=$(gzip -9 -c dist-wasm/c2paseal.wasm | wc -c)
           echo "c2paseal.wasm: $raw bytes, $gz gzipped (gzip -9)" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Vet and staticcheck (js/wasm)
+      - name: Vet and staticcheck (host and js/wasm)
+        working-directory: cmd/c2paseal-wasm
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
-          GOOS=js GOARCH=wasm go vet ./cmd/c2paseal-wasm
-          GOOS=js GOARCH=wasm "$(go env GOPATH)/bin/staticcheck" ./cmd/c2paseal-wasm
-      - name: Size budget and browser tests
+          go vet ./...
+          "$(go env GOPATH)/bin/staticcheck" ./...
+          GOOS=js GOARCH=wasm go vet .
+          GOOS=js GOARCH=wasm "$(go env GOPATH)/bin/staticcheck" .
+      - name: Tests, size budget and browser tests
+        working-directory: cmd/c2paseal-wasm
         env:
           C2PASEAL_WASM: ${{ github.workspace }}/dist-wasm/c2paseal.wasm
           C2PASEAL_BROWSER_TEST: "1"
         run: |
           google-chrome --version
-          go test -v -run 'TestWasmSize|TestBrowser|TestSite' ./cmd/c2paseal-wasm
+          go test -v ./...
       - uses: actions/upload-artifact@v7
         with:
           name: c2paseal-wasm
@@ -215,3 +221,50 @@ jobs:
         run: |
           go run ./cmd/wmharness -check
           cat ROBUSTNESS.md >> "$GITHUB_STEP_SUMMARY"
+
+  # The manifest store (cmd/sealstore, its own module): the recovery test
+  # signs with a watermark and soft binding, strips and re-encodes the copy,
+  # and recovers it; c2patool checks the signed files.
+  sealstore:
+    runs-on: ubuntu-24.04
+    env:
+      C2PASEAL_REQUIRE_C2PATOOL: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: cmd/sealstore/go.mod
+          cache-dependency-path: cmd/sealstore/go.sum
+      - name: Cache c2patool
+        id: c2patool-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/c2patool
+          key: c2patool-${{ env.C2PATOOL_VERSION }}-ubuntu-24.04
+      - name: Install c2patool
+        if: steps.c2patool-cache.outputs.cache-hit != 'true'
+        run: cargo install c2patool --version "${C2PATOOL_VERSION}" --locked
+      - name: Check c2patool
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/c2patool" --version
+      - name: Vet, staticcheck and test
+        working-directory: cmd/sealstore
+        run: |
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+          go test -v ./...
+      - name: Build and run the image
+        run: |
+          docker build -f cmd/sealstore/Dockerfile --build-arg VERSION=ci -t sealstore:ci .
+          key=sk_ci_$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+          mkdir -p "$RUNNER_TEMP/store/data"
+          echo "ci $(printf '%s' "$key" | sha256sum | cut -d' ' -f1)" > "$RUNNER_TEMP/store/keys.txt"
+          chmod -R a+rwX "$RUNNER_TEMP/store"
+          docker run -d --name sealstore -p 127.0.0.1:8090:8090 -v "$RUNNER_TEMP/store:/store" --read-only --cap-drop ALL sealstore:ci \
+            serve --dir /store/data --api-keys /store/keys.txt
+          for i in $(seq 30); do curl -fsS http://127.0.0.1:8090/healthz && break; sleep 1; done
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/v1/manifests/0123456789abcdef)" = 404 ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X PUT --data-binary x http://127.0.0.1:8090/v1/manifests/0123456789abcdef)" = 401 ]
+          [ "$(docker inspect -f '{{.Config.User}}' sealstore:ci)" = "nonroot:nonroot" ]
+          echo "image size: $(docker image inspect -f '{{.Size}}' sealstore:ci) bytes" | tee -a "$GITHUB_STEP_SUMMARY"

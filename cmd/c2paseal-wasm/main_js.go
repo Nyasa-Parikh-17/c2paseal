@@ -48,7 +48,22 @@ func exports() js.Value {
 			return string(errorJSON(err))
 		}
 		o := optsArg(args)
-		return string(analyzeJSON(b, str(o, "name"), str(o, "trustAnchors")))
+		store, err := optBytes(o, "manifestStore")
+		if err != nil {
+			return string(errorJSON(err))
+		}
+		return string(analyzeJSON(b, str(o, "name"), str(o, "trustAnchors"), store))
+	}))
+	api.Set("extractWatermark", js.FuncOf(func(_ js.Value, args []js.Value) (out any) {
+		defer recoverTo(&out)
+		px, err := bytesArg(args, 0, "rgba")
+		if err != nil {
+			return string(errorJSON(err))
+		}
+		if len(args) < 3 || args[1].Type() != js.TypeNumber || args[2].Type() != js.TypeNumber {
+			return string(errorJSON(fmt.Errorf("extractWatermark(rgba, width, height): width and height must be numbers")))
+		}
+		return string(extractWatermarkJSON(px, args[1].Int(), args[2].Int()))
 	}))
 	api.Set("version", js.FuncOf(func(js.Value, []js.Value) any { return string(versionJSON()) }))
 	return api

@@ -83,6 +83,24 @@
       result.sign.push({ name: "again", ...(await shown(ctx, "result-sign")) });
     }
 
+    // Recover: a watermarked, signed photo re-encoded without its manifest,
+    // looked up in the test's store.
+    ctx.doc.getElementById("tab-recover").click();
+    const note = ctx.doc.getElementById("recover-note");
+    result.recoverNote = note.hidden ? "" : note.textContent;
+    result.recoverDisabled = ctx.doc.getElementById("recover-file").disabled;
+    if (!result.recoverDisabled) {
+      ctx.doc.getElementById("store-url").value = new URL(cases.recover.store, location.href).href;
+      const copy = new Uint8Array(await (await fetch(cases.recover.file)).arrayBuffer());
+      drop(ctx, ctx.doc.getElementById("recover-drop"), "copy.jpg", copy);
+      await sleep(10);
+      result.recover = await shown(ctx, "result-recover");
+      const plain = new Uint8Array(await (await fetch("/__test/f/unsigned/large.jpg")).arrayBuffer());
+      drop(ctx, ctx.doc.getElementById("recover-drop"), "plain.jpg", plain);
+      await sleep(10);
+      result.recoverNone = await shown(ctx, "result-recover");
+    }
+
     if (params.get("offline") === "1") {
       // Wait until the service worker controls the app, then cut the server
       // off and load the app again.

@@ -30,9 +30,9 @@ jobs:
           "$(go env GOPATH)/bin/staticcheck" ./...
       - run: go test ./...
       # The modules with their own go.mod: key providers and sealsvc.
-      - name: Test keys/awskms, keys/gcpkms and cmd/sealsvc
+      - name: Test the other modules
         run: |
-          for m in keys/awskms keys/gcpkms cmd/sealsvc; do
+          for m in keys/awskms keys/gcpkms cmd/sealsvc cmd/sealstore cmd/c2paseal-wasm watermark; do
             (cd "$m" && go vet ./... && go test ./...)
           done
 
@@ -111,10 +111,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --notes-file notes.md --verify-tag
 
-  # The sealsvc image, for linux/amd64 and linux/arm64, published to GHCR as
-  # ghcr.io/<owner>/c2paseal/sealsvc:<tag> (and <version>, <major.minor>).
+  # The service images, for linux/amd64 and linux/arm64, published to GHCR as
+  # ghcr.io/<owner>/c2paseal/<service>:<tag> (and <version>, <major.minor>).
   image:
     needs: test
+    strategy:
+      matrix:
+        service: [sealsvc, sealstore]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -131,7 +134,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}/sealsvc
+          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
@@ -139,7 +142,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          file: cmd/sealsvc/Dockerfile
+          file: cmd/${{ matrix.service }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

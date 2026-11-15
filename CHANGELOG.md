@@ -11,6 +11,23 @@ before v1.0.0 a minor version may change the API.
   harness (`cmd/wmharness`) measures JPEG, resizing, cropping, screenshots,
   colour changes and noise, and publishes the results, failures included,
   in `watermark/ROBUSTNESS.md`; CI regenerates and checks them.
+- **Soft bindings**: `sign.Options.SoftBindings` records `c2pa.soft-binding`
+  assertions (algorithm and value); they are decoded when reading.
+- **sealstore** (`cmd/sealstore`, its own module): a self-hosted manifest
+  store keyed by watermark ID (files on disk; public lookups, writes with an
+  API key, a JSON audit log, a container image). `sealstore sign`
+  watermarks, signs with the soft binding and uploads; `sealstore recover`
+  reads a copy's watermark, fetches the manifest and verifies it against
+  the copy.
+- **Recover credentials** in the web app (WebAssembly):
+  `extractWatermark()` on pixels decoded by the browser, and `analyze()`
+  takes an external manifest store.
+
+### Changed
+- `cmd/c2paseal-wasm` is its own Go module (it links the watermark); build
+  it from its directory. The web app's Content-Security-Policy allows
+  `connect-src https:` and localhost, for the manifest store the user
+  names.
 
 ## v0.5.0 — 2026-11-15
 

@@ -37,6 +37,9 @@ a { color: var(--accent); }
 button.primary, #sign-sample, button.again { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 .pick { color: var(--muted); font-size: .9rem; }
+.store { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; width: 100%; }
+.store input { font: inherit; flex: 1 1 260px; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); }
+p.note { color: var(--muted); font-size: .9rem; }
 .pick input { max-width: 100%; }
 
 .testonly { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
@@ -59,6 +62,8 @@ button:disabled { opacity: .5; cursor: default; }
 .status.invalid { background: var(--bad-bg); border-color: var(--bad); }
 .status.invalid h3 { color: var(--bad); }
 .status.none { background: var(--none-bg); border-color: var(--border); }
+.status.recovered { background: var(--panel); border-color: var(--accent); }
+.status.recovered h3 { color: var(--accent); }
 .status.none h3 { color: var(--muted); }
 .status.error { background: var(--bad-bg); border-color: var(--bad); }
 

@@ -2092,3 +2092,113 @@ standard library only, self-hosted only.
 **Open issues**
 - Cropping: a synchronisation pattern or a search over crop offsets would
   be needed. That is Future work, not attempted, and the harness says so.
+
+### Phase 30 — Manifest store and recovery (2026-11-15)
+
+Decisions (user, 2026-11-15, recorded under Phase 29): files on disk with
+the standard library; self-hosted only.
+
+**Built**
+- Soft binding (core):
+  - `assertion.SoftBinding` (`c2pa.soft-binding`: alg, blocks
+    [{scope, value}], name, alg-params, pad, pad2; field names from c2pa-rs
+    0.90.21) is decoded when reading.
+  - `sign.Options.SoftBindings` writes one assertion per algorithm (`__n`
+    suffixes) after the hard binding; `ErrBadSoftBind` for an empty field
+    or a repeated algorithm.
+  - c2patool decodes it: `{"alg": …, "pad": [], "blocks": [{"scope": {},
+    "value": "c2fa5ea1d0c0ffee"}]}`, and files with it stay Valid/Trusted
+    (TestSoftBinding, JPEG and AVIF).
+- Watermark split: `watermark` (the algorithm, standard library only) and
+  `watermark/wmfile` (file decode and encode with x/image). Added
+  `watermark.SoftBindingAlg = "io.github.nyasa-parikh-17.c2paseal.watermark.1"`,
+  an entity-specific name (not on the C2PA list).
+- `cmd/sealstore`, its own module (core + watermark):
+  - `serve`: the file store `<dir>/<id>.c2pa` (atomic writes);
+    `PUT /v1/manifests/{id}` needs an API key (SHA-256 hashes, constant-time
+    compare) and refuses (422) a store whose active manifest does not
+    record `{id}` as its watermark soft binding; `GET` is public with
+    `Access-Control-Allow-Origin: *` and `Cache-Control`; `/healthz`; a
+    slog JSON audit log; timeouts and a body limit.
+  - `sign`: watermark (new random ID) → sign with the soft binding →
+    write → upload.
+  - `recover`: decode → extract → GET → `VerifyBytes` with the store.
+    Recovered = claim signature validated and no failures except the hard
+    binding mismatch and, without anchors, `signingCredential.untrusted`.
+    The report says plainly that the copy's bytes changed.
+  - Dockerfile (distroless, non-root, default `serve --dir /store/data
+    --api-keys /store/keys.txt`); README.
+- Web app "Recover credentials" (a third tab):
+  - `cmd/c2paseal-wasm` became its own module, so it can link the watermark
+    algorithm. `internal/` stays importable, since the rule is path-based.
+  - New `extractWatermark(rgba, w, h)`; the browser decodes the image
+    (`createImageBitmap` without colour conversion, then canvas
+    `getImageData`).
+  - `analyze()` takes `manifestStore` (`analysis.AnalyseWith`).
+  - The banner: "Credentials recovered", with signer, time, "the signature
+    is valid", "this copy is not the signed file…" and the watermark ID.
+    Invalid recovered credentials get a red banner; "No watermark found"
+    is neutral.
+  - The store URL comes from `?store=` or what the user entered last
+    (localStorage, wrapped in try/catch).
+  - Under `serve` (no wasm) the tab is disabled with a note pointing to the
+    Pages site or `sealstore recover`.
+  - CSP: `connect-src 'self' https: http://localhost:* http://127.0.0.1:*`,
+    in the meta tag and in serve's header (TestPageAndErrors keeps them
+    equal).
+- CI:
+  - The `wasm` job builds and tests from the module directory (host tests
+    included).
+  - A new `sealstore` job runs vet, staticcheck and tests with c2patool
+    required, then builds the image and runs it read-only with
+    `--cap-drop ALL`: healthz, 404, 401, nonroot.
+  - pages.yml builds from the module.
+  - Release: the test job covers all modules; the image job is a matrix
+    (sealsvc, sealstore).
+
+**Results**
+- Recovery test (TestRecovery), the phase's check. For IMG_0003.jpg and
+  sample1.png: watermark, sign with the soft binding, and upload; c2patool
+  says Valid/Trusted for the signed files. Three stripped copies of each:
+  - manifest removed only: confidence 0.75 / 0.91;
+  - re-encoded JPEG 80: 0.73 / 0.77;
+  - resized 75 % then JPEG 85: 0.57 / 0.70.
+
+  Every copy was recovered: the right manifest, signature valid, Trusted
+  under the TEST ONLY root, content reported as changed. Without anchors:
+  recovered, untrusted.
+- Failures are handled: an unmarked image (no watermark), a store with no
+  entry for the ID, garbage, the store down. Store API: 401 ×2, 400, 422
+  ×3 (not a store, another ID's store, no soft binding), 413, 201, then
+  200 replaced; GET 200 with CORS, 404, 400. The CLI end to end: serve,
+  `sign --store`, `recover --trust` of a JPEG 75 copy, and the error exit
+  codes.
+- Browser (TestSite):
+  - wasm: a re-encoded watermarked copy dropped on the Recover tab →
+    "Credentials recovered" with the ID, "the signature is valid", "changed
+    since signing", raw JSON shown; an unmarked file → "No watermark
+    found".
+  - serve: the tab is disabled with the note.
+  - Screenshots at 1100 and 390 px: no overflow, no console errors. The
+    empty status list for "No watermark found" is now hidden.
+- The wasm build is 3.85 MB gzipped (92% of the budget).
+- All seven modules: gofmt, vet and staticcheck (host and js/wasm) are
+  clean and all suites pass. A clean clone builds every module with
+  `-mod=readonly`, and all are tidy (sealstore needed x/image as a direct
+  requirement for its test; fixed).
+
+**Not done here (needs the user)**
+- Push; CI green. Gate H: recovery results and the robustness table, then
+  ask before v0.6.0. Release checklist: requires at v0.6.0 in keys/*,
+  cmd/sealsvc, cmd/sealstore and cmd/c2paseal-wasm; tags v0.6.0,
+  keys/awskms/v0.6.0, keys/gcpkms/v0.6.0, cmd/sealsvc/v0.6.0,
+  cmd/sealstore/v0.6.0, cmd/c2paseal-wasm/v0.6.0, watermark/v0.6.0.
+- v0.5.0 (c4d25af) is still to be pushed with its tags.
+
+**Open issues / Future work**
+- The C2PA Soft Binding Resolution API (standard lookup endpoints), so other
+  tools can query sealstore.
+- Crop-robust watermarking; a keyed watermark.
+- Recovery under `serve` would need the watermark in the core module (its
+  x/image dependency rules that out).
+- wasm headroom is 8%.

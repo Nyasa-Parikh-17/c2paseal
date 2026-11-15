@@ -367,7 +367,7 @@ function render(target, a) {
   }
   det.append(ul);
   if (!none && b.cls === "invalid") det.open = true;
-  panel.append(det);
+  if ((a.statuses || []).length > 0) panel.append(det);
 
   if (store) {
     const raw = el("details");

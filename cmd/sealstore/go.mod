@@ -5,6 +5,7 @@ go 1.27
 require (
 	github.com/Nyasa-Parikh-17/c2paseal v0.5.0
 	github.com/Nyasa-Parikh-17/c2paseal/watermark v0.6.0
+	golang.org/x/image v0.48.0
 )
 
 require (
@@ -13,7 +14,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.6 // indirect
 	github.com/veraison/go-cose v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/image v0.48.0 // indirect
 )
 
 // Builds in this repository use the local copies; users of the module get

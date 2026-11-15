@@ -134,6 +134,11 @@ func Insert(b, store []byte) ([]byte, *Box, int, error) {
 	if ftyp == nil {
 		return nil, nil, 0, fmt.Errorf("bmff: %w", ErrNoFtyp)
 	}
+	if ftyp.HeaderLen == 8 && binary.BigEndian.Uint32(b[ftyp.Offset:]) == 0 {
+		// Size 0: ftyp runs to the end of the file, so a box after it would
+		// be read as part of ftyp.
+		return nil, nil, 0, fmt.Errorf("bmff: ftyp box at offset %d extends to the end of the file: %w", ftyp.Offset, ErrMalformed)
+	}
 	at := ftyp.End()
 	size := InsertedSize(len(store))
 	box := make([]byte, 0, size)

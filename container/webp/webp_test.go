@@ -264,9 +264,16 @@ func FuzzStripInsert(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Insert may add the last chunk's missing pad byte; nothing else.
-		if !bytes.Equal(back, s) && !(len(back) == len(s)+1 && bytes.Equal(back[12:len(s)], s[12:]) && back[len(back)-1] == 0) {
-			t.Fatal("Strip(Insert(s)) differs from s")
+		// Insert may add the last chunk's missing pad byte at the end of the
+		// RIFF (before any bytes after it, which stay where they are), with
+		// the RIFF size one larger; nothing else.
+		if !bytes.Equal(back, s) {
+			end, _ := riffEnd(s)
+			padded := append(append(bytes.Clone(s[:end]), 0), s[end:]...)
+			binary.LittleEndian.PutUint32(padded[4:8], binary.LittleEndian.Uint32(s[4:8])+1)
+			if !bytes.Equal(back, padded) {
+				t.Fatalf("Strip(Insert(s)) differs from s:\n%q\n%q", back, s)
+			}
 		}
 	})
 }

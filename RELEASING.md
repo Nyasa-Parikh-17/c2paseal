@@ -29,8 +29,12 @@ requires the core (and some require each other) at a real version, with a
 1. In `CHANGELOG.md`, rename `## Unreleased` to `## vX.Y.Z — YYYY-MM-DD`.
 2. In every module's `go.mod`, set the requires on C2paSeal modules to
    `vX.Y.Z` (the table above).
-3. Update version numbers in the docs that name one: `docs/github-action.md`
-   (`uses: …@vX.Y.Z`) and `docs/sealsvc.md` (the image tag).
+3. The docs live in the website repository
+   ([c2paseal-website](https://github.com/Nyasa-Parikh-17/c2paseal-website)).
+   After the release, set its `LIBRARY_VERSION` to `vX.Y.Z` and update the
+   version numbers in its `docs/github-action.md` (`uses: …@vX.Y.Z`) and
+   `docs/sealsvc.md` (the image tag). The website's app is built from that
+   version.
 4. Check that every module is tidy **in a clean clone** (`go mod tidy` in
    a OneDrive-synced folder fails on placeholder files):
 

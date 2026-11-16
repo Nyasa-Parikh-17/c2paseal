@@ -19,30 +19,33 @@ before v1.0.0 a minor version may change the API.
   (invalid/untrusted/never). It writes file annotations, a job summary and
   a JSON Lines report. It builds from the tagged source on Linux, macOS and
   Windows runners. CI runs it on all three.
-- **Documentation site** at `/docs/` on the Pages site, from `docs/*.md`:
-  a quickstart, a guide per component, and "What C2PA does and does not
-  prove". `scripts/docsite` renders it with the standard library and fails
-  on a broken link.
+- **Documentation**: a quickstart, a guide per component, and "What C2PA
+  does and does not prove". It is published on the website (below).
 - **Examples** (`examples/`, its own module): sign-and-verify,
   upload-server (middleware + key URIs), verify-folder and
   watermark-recover, each with a test.
 - `PENDING_APPROVAL.md` (image features awaiting a decision),
   `FUTURE_SCOPE.md` and `RELEASING.md`.
-- **One website**: a home page at the root of the Pages site. The app
-  (check and sign images) moves to `/app/`, and the docs are at `/docs/`.
-  All three share one top bar. App tabs can be linked: `/app/#sign`,
-  `/app/#recover`.
+- **The website** moves to its own repository,
+  [c2paseal-website](https://github.com/Nyasa-Parikh-17/c2paseal-website), at
+  <https://nyasa-parikh-17.github.io/c2paseal-website/>: a home page, the app
+  at `/app/` and the docs at `/docs/`, sharing one top bar. The app is
+  built from this library at a pinned release. App tabs can be linked:
+  `/app/#sign`, `/app/#recover`.
 - **Your trust list** in the app: load a PEM file of trust anchors (such as
   the official C2PA trust list). It is used on every tab, kept in the
   browser and never uploaded. Under `c2paseal serve` it is sent with each
   check (form field `anchors`).
 
 ### Changed
-- The app's address is now `/app/`. Old links with `?store=` are forwarded
-  there, and a service worker at the root retires the app's old offline
-  cache. `c2paseal serve` serves the whole website; its API moved to
-  `/app/api/verify` and `/app/api/sign`. `web.App()` is the app alone;
-  `web.Site()` is the website.
+- The old address, <https://nyasa-parikh-17.github.io/c2paseal/>, now
+  publishes `web/moved`: every old URL redirects to the same page on the new
+  website (old `?store=` links open the Recover tab), and a service worker
+  retires the old offline cache.
+- `c2paseal serve` serves the app at `/app/` (`/` redirects there,
+  `/docs/…` to the website). Its API moved to `/app/api/verify` and
+  `/app/api/sign`. `web.App()` is the app; `web.WebsiteURL` is the
+  website.
 
 ### Fixed
 - `container/bmff`: `Insert` refuses a file whose `ftyp` box has size 0

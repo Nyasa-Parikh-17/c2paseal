@@ -221,7 +221,7 @@ type siteReport struct {
 	TrustListBad     string `json:"trustListBad"`
 	TrustListCleared string `json:"trustListCleared"`
 	HashTab          bool   `json:"hashTab"`
-	Offline        *struct {
+	Offline          *struct {
 		Mode   string `json:"mode"`
 		Verify shown  `json:"verify"`
 		Sign   shown  `json:"sign"`

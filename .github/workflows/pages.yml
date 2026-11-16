@@ -1,13 +1,16 @@
 name: pages
 
-# Builds the website (web/site: the home page, and the app at /app/ with the
-# WebAssembly build) and the docs site (docs/, at /docs/), and deploys them to
-# GitHub Pages. The repository's Pages source must be "GitHub Actions"
-# (Settings → Pages), once.
+# The website moved to its own repository (c2paseal-website). This publishes
+# web/moved at the old address, https://nyasa-parikh-17.github.io/c2paseal/,
+# so old links redirect to the same page on the new site. See
+# web/moved/README.md.
 
 on:
   push:
     branches: [main]
+    paths:
+      - web/moved/**
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
@@ -17,40 +20,15 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  CGO_ENABLED: "0"
-
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      # The same checks as ci's wasm job, so a broken app is never deployed.
-      - name: Test the app in headless Chrome
-        env:
-          C2PASEAL_BROWSER_TEST: "1"
-        working-directory: cmd/c2paseal-wasm
-        run: go test -run 'TestWasmSize|TestBrowser|TestSite' ./...
-      - name: Assemble the site
+      - name: Assemble the redirect site
         run: |
           mkdir -p _site
-          cp -r web/site/. _site/
-          # The app lives at app/; the WebAssembly build goes next to it.
-          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../_site/app/c2paseal.wasm .)
-          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/app/
-          # The documentation site, from docs/*.md (fails on a broken link).
-          go run ./scripts/docsite -src docs -out _site/docs
-          # A new cache name per deployment, so browsers replace the old one.
-          version="${GITHUB_SHA::12}"
-          sed -i "s/^const VERSION = \"dev\";$/const VERSION = \"$version\";/" _site/app/sw.js
-          grep -q "^const VERSION = \"$version\";$" _site/app/sw.js
-          {
-            echo "site: $(du -sb _site | cut -f1) bytes in $(find _site -type f | wc -l) files"
-            echo "c2paseal.wasm: $(wc -c < _site/app/c2paseal.wasm) bytes, $(gzip -9 -c _site/app/c2paseal.wasm | wc -c) gzipped"
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+          cp web/moved/index.html web/moved/404.html web/moved/moved.js web/moved/sw.js _site/
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

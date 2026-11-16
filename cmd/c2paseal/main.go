@@ -74,7 +74,7 @@ file (JSON Lines with --json; inspect always does) for the folder's images,
 and its subfolders' with --recursive.
 
 Run "c2paseal <command> -h" for a command's flags.
-Documentation: https://nyasa-parikh-17.github.io/c2paseal/docs/
+Documentation: https://nyasa-parikh-17.github.io/c2paseal-website/docs/
 
 exit codes:
   0  success, or the manifest is valid (every manifest, for several files)
@@ -346,7 +346,7 @@ func serveCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		defer cancel()
 		srv.Shutdown(shut)
 	}()
-	fmt.Fprintf(stdout, "C2paSeal website on http://%s/, the app at /app/ (signing with the TEST ONLY PKI in %s; Ctrl+C to stop)\n", ln.Addr(), *pki)
+	fmt.Fprintf(stdout, "C2paSeal app on http://%s/app/ (signing with the TEST ONLY PKI in %s; Ctrl+C to stop)\n", ln.Addr(), *pki)
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return c.fail(exitInvalid, fmt.Errorf("c2paseal serve: %w", err))
 	}

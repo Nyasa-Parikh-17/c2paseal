@@ -688,7 +688,9 @@ Tasks:
 - Added with the user's approval on 2026-11-16: one website, with a home
   page at the root, the app at `/app/`, a shared top bar across the home
   page, the app and the docs, and loading your own trust list in the app
-  (PENDING_APPROVAL.md item A1).
+  (PENDING_APPROVAL.md item A1). At the user's request the website (home
+  page, docs, deploy) lives in its own repository, c2paseal-website; the
+  app stays in the library, which the website builds from at a release.
 
 Done when:
 - A new user gets through the quickstart in under 5 minutes.

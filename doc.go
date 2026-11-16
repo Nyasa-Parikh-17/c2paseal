@@ -34,7 +34,7 @@
 //
 // The middleware package signs uploads in an HTTP service. The
 // documentation site, with a quickstart and a guide per component, is at
-// https://nyasa-parikh-17.github.io/c2paseal/docs/.
+// https://nyasa-parikh-17.github.io/c2paseal-website/docs/.
 //
 // The certificates in testdata/pki are TEST ONLY: their private keys are
 // public, so files signed with them prove nothing and validators report

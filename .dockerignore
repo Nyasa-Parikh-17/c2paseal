@@ -8,5 +8,4 @@ interop
 **/*.exe
 **/*.wasm
 **/testdata
-docs
 examples

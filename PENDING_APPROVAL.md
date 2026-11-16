@@ -71,7 +71,7 @@ scheduling any of these.
 
 | # | Item | When |
 |---|---|---|
-| A1 | **Load your own trust list in the browser** and keep it between visits | Approved 2026-11-16, built in Phase 31 (see docs/web-app.md) |
+| A1 | **Load your own trust list in the browser** and keep it between visits | Approved 2026-11-16, built in Phase 31 (see the website's web app guide) |
 
 ## How to approve
 

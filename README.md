@@ -12,12 +12,12 @@ Credentials in **JPEG, PNG, WebP, HEIC and AVIF** images. It builds with
 `CGO_ENABLED=0` into one static binary or a Go package, with no Rust
 toolchain, C library or external tool.
 
-**[Try it in your browser →](https://nyasa-parikh-17.github.io/c2paseal/app/)**
+**[Try it in your browser →](https://nyasa-parikh-17.github.io/c2paseal-website/app/)**
 It is the same library compiled to WebAssembly. Your files never leave your
 machine.
 
-**[Read the documentation →](https://nyasa-parikh-17.github.io/c2paseal/docs/)**
-It starts with a five-minute [quickstart](docs/quickstart.md).
+**[Read the documentation →](https://nyasa-parikh-17.github.io/c2paseal-website/docs/)**
+It starts with a five-minute [quickstart](https://nyasa-parikh-17.github.io/c2paseal-website/docs/quickstart.html).
 
 ---
 
@@ -49,14 +49,14 @@ C2paSeal's focus is the signer.
 
 | | | Guide |
 |---|---|---|
-| **CLI** | `c2paseal sign`, `verify`, `inspect`, batch mode over folders | [Command line](docs/cli.md) |
-| **Go library** | `Sign`, `Verify`, `Read`, in memory or on files | [Go library](docs/library.md) |
-| **KMS keys** | AWS KMS and Google Cloud KMS through key URIs; the key never leaves KMS | [Keys and KMS](docs/keys.md) |
-| **HTTP middleware** | Signs images as they are uploaded to your Go service | [HTTP middleware](docs/middleware.md) |
-| **GitHub Action** | Sign or verify images in a workflow | [GitHub Action](docs/github-action.md) |
-| **sealsvc** | A self-hosted signing API with API keys, rate limits, audit log and metrics | [Signing service](docs/sealsvc.md) |
-| **Web app** | Verify and sign in the browser, offline | [Web app](docs/web-app.md) |
-| **Watermark + sealstore** | Get credentials back for a copy that lost them | [Watermark and recovery](docs/watermark.md) |
+| **CLI** | `c2paseal sign`, `verify`, `inspect`, batch mode over folders | [Command line](https://nyasa-parikh-17.github.io/c2paseal-website/docs/cli.html) |
+| **Go library** | `Sign`, `Verify`, `Read`, in memory or on files | [Go library](https://nyasa-parikh-17.github.io/c2paseal-website/docs/library.html) |
+| **KMS keys** | AWS KMS and Google Cloud KMS through key URIs; the key never leaves KMS | [Keys and KMS](https://nyasa-parikh-17.github.io/c2paseal-website/docs/keys.html) |
+| **HTTP middleware** | Signs images as they are uploaded to your Go service | [HTTP middleware](https://nyasa-parikh-17.github.io/c2paseal-website/docs/middleware.html) |
+| **GitHub Action** | Sign or verify images in a workflow | [GitHub Action](https://nyasa-parikh-17.github.io/c2paseal-website/docs/github-action.html) |
+| **sealsvc** | A self-hosted signing API with API keys, rate limits, audit log and metrics | [Signing service](https://nyasa-parikh-17.github.io/c2paseal-website/docs/sealsvc.html) |
+| **Web app** | Verify and sign in the browser, offline | [Web app](https://nyasa-parikh-17.github.io/c2paseal-website/docs/web-app.html) |
+| **Watermark + sealstore** | Get credentials back for a copy that lost them | [Watermark and recovery](https://nyasa-parikh-17.github.io/c2paseal-website/docs/watermark.html) |
 
 ## Quick start
 
@@ -139,7 +139,7 @@ watermark recovery.
   ingredient), sidecar and remote manifests, and soft bindings.
 - **Targets** C2PA 2.4, pinned in [SPEC.md](SPEC.md).
 
-Details and known limits: [Formats and scope](docs/formats.md).
+Details and known limits: [Formats and scope](https://nyasa-parikh-17.github.io/c2paseal-website/docs/formats.html).
 
 ## What a signature proves
 
@@ -147,13 +147,13 @@ A **Trusted** result means a certificate holder on your trust list signed
 the file, and neither the picture nor the manifest has changed since. It
 does **not** mean the picture is true: C2PA records what the signer
 claims. Read
-[what C2PA does and does not prove](docs/what-c2pa-proves.md) before you
+[what C2PA does and does not prove](https://nyasa-parikh-17.github.io/c2paseal-website/docs/what-c2pa-proves.html) before you
 rely on it.
 
 > **The test certificates in `testdata/pki` are TEST ONLY.** Their private
 > keys are public, so anything signed with them proves nothing. For real
 > use you need a certificate from a CA on the C2PA trust list; see
-> [Certificates and trust](docs/certificates.md).
+> [Certificates and trust](https://nyasa-parikh-17.github.io/c2paseal-website/docs/certificates.html).
 
 ## Repository layout
 
@@ -166,9 +166,8 @@ rely on it.
 | `keys/awskms/`, `keys/gcpkms/` | KMS key providers (separate modules) |
 | `cmd/sealsvc/` | Signing service (separate module) |
 | `watermark/`, `cmd/sealstore/` | Watermark and manifest store (separate modules) |
-| `cmd/c2paseal-wasm/`, `web/` | WebAssembly build and web app |
+| `cmd/c2paseal-wasm/`, `web/` | WebAssembly build and the web app (published on the [website](https://nyasa-parikh-17.github.io/c2paseal-website/); its home page and docs live in [c2paseal-website](https://github.com/Nyasa-Parikh-17/c2paseal-website)) |
 | `examples/` | Runnable examples (separate module) |
-| `docs/` | The documentation site's source |
 | `testdata/`, `interop/` | Fixtures with `c2patool`'s output, and the cross-tool harness |
 
 ## Project status

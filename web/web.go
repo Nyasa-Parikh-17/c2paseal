@@ -1,11 +1,11 @@
-// Package web serves the C2paSeal website: a home page, and the app at
-// app/ (drop an image, see its manifest store and validation statuses, sign
-// it with the TEST ONLY PKI and see the re-verified result).
+// Package web serves the C2paSeal web app at /app/: drop an image, see its
+// manifest store and validation statuses, sign it with the TEST ONLY PKI and
+// see the re-verified result.
 //
-// The website is the static site in site/, the same one deployed to GitHub
-// Pages (where the docs are added at docs/). There the app runs the library
-// as WebAssembly; served from here it has no c2paseal.wasm and uses this
-// package's HTTP API instead, which returns the same JSON (package
+// The app is the static site in site/app. The C2paSeal website (its own
+// repository, at WebsiteURL) publishes the same files with the library
+// compiled to WebAssembly. Served from here the app has no c2paseal.wasm and
+// uses this package's HTTP API instead, which returns the same JSON (package
 // internal/analysis builds it for both).
 package web
 
@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/analysis"
@@ -29,9 +30,11 @@ import (
 //go:embed site
 var siteFS embed.FS
 
-// Site is the static website: the home page (index.html, site.css,
-// home.js), a service worker that retires the one the app used to register
-// at the root (sw.js), and the app under app/ (see App).
+// WebsiteURL is the C2paSeal website, which has the home page and the
+// documentation (at docs/) and publishes this app at app/.
+const WebsiteURL = "https://nyasa-parikh-17.github.io/c2paseal-website/"
+
+// Site is the embedded site: the app under app/ (see App).
 func Site() fs.FS {
 	sub, err := fs.Sub(siteFS, "site")
 	if err != nil {
@@ -111,7 +114,9 @@ type SignedFile = analysis.SignedFile
 
 // Handler returns the demo's HTTP handler:
 //
-//	GET  /                the website (Site): the home page at /, the app at /app/
+//	GET  /app/            the app (App)
+//	GET  /                redirects to /app/
+//	GET  /docs/…          redirects to the documentation on the website
 //	POST /app/api/verify  analyse an uploaded file (multipart field "file")
 //	POST /app/api/sign    sign it with the test PKI and analyse the result
 //
@@ -121,6 +126,12 @@ type SignedFile = analysis.SignedFile
 func Handler(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
 	static := http.FileServerFS(Site())
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/app/", http.StatusFound)
+	})
+	mux.HandleFunc("GET /docs/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, WebsiteURL+strings.TrimPrefix(r.URL.Path, "/"), http.StatusFound)
+	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", ContentSecurityPolicy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")

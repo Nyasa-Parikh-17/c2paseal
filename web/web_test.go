@@ -143,15 +143,23 @@ func getPage(t *testing.T, url string) []byte {
 
 func TestPageAndErrors(t *testing.T) {
 	srv := server(t)
-	// The home page links to the app; the app says TEST ONLY.
-	if home := getPage(t, srv.URL+"/"); !bytes.Contains(home, []byte(`href="app/"`)) {
-		t.Error("the home page does not link to the app")
+	// / leads to the app, and /docs/ to the website's documentation.
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for path, want := range map[string]string{"/": "/app/", "/docs/quickstart.html": WebsiteURL + "docs/quickstart.html"} {
+		resp, err := noFollow.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != want {
+			t.Errorf("%s: %d to %q, want a redirect to %q", path, resp.StatusCode, resp.Header.Get("Location"), want)
+		}
 	}
+	// The app says TEST ONLY.
 	if app := getPage(t, srv.URL+"/app/"); !bytes.Contains(app, []byte("TEST ONLY")) || !bytes.Contains(app, []byte(`id="trustlist-file"`)) {
 		t.Error("the app page lacks the TEST ONLY label or the trust list control")
 	}
-	for path, ct := range map[string]string{"/site.css": "text/css", "/home.js": "text/javascript", "/sw.js": "text/javascript",
-		"/app/app.js": "text/javascript", "/app/app.css": "text/css", "/app/sw.js": "text/javascript", "/app/demo/sample.jpg": "image/jpeg"} {
+	for path, ct := range map[string]string{"/app/app.js": "text/javascript", "/app/app.css": "text/css", "/app/sw.js": "text/javascript", "/app/demo/sample.jpg": "image/jpeg"} {
 		resp, err := http.Get(srv.URL + path)
 		if err != nil {
 			t.Fatal(err)
@@ -263,21 +271,9 @@ func TestServiceWorkerAssets(t *testing.T) {
 	})
 }
 
-// The root sw.js only retires the old root service worker: it must not
-// cache or serve anything, and must leave the app's caches alone.
-func TestRootServiceWorker(t *testing.T) {
-	sw, err := fs.ReadFile(Site(), "sw.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"registration.unregister()", `!key.startsWith("c2paseal-app-")`} {
-		if !bytes.Contains(sw, []byte(want)) {
-			t.Errorf("root sw.js lacks %s", want)
-		}
-	}
-	if bytes.Contains(sw, []byte(`"fetch"`)) {
-		t.Error("root sw.js handles fetch")
-	}
+// The app's service worker cache name starts with c2paseal-app-, which the
+// redirect site at the old address (web/moved) leaves alone.
+func TestAppCacheName(t *testing.T) {
 	app, _ := fs.ReadFile(App(), "sw.js")
 	if !bytes.Contains(app, []byte(`const CACHE = "c2paseal-app-" + VERSION;`)) {
 		t.Error("app sw.js cache name does not start with c2paseal-app-")
@@ -318,5 +314,26 @@ func TestUserTrustList(t *testing.T) {
 	}
 	if code, _ := send("-----BEGIN CERTIFICATE-----\nbm90IGEgY2VydGlmaWNhdGU=\n-----END CERTIFICATE-----\n"); code != http.StatusBadRequest {
 		t.Errorf("bad trust list: %d, want 400", code)
+	}
+}
+
+// The redirect site for the old address (web/moved, published by the pages
+// workflow) sends visitors to WebsiteURL.
+func TestMovedSite(t *testing.T) {
+	for _, f := range []string{"index.html", "404.html", "moved.js"} {
+		b, err := os.ReadFile(filepath.Join("moved", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(b, []byte(WebsiteURL)) {
+			t.Errorf("moved/%s does not point at %s", f, WebsiteURL)
+		}
+	}
+	sw, err := os.ReadFile(filepath.Join("moved", "sw.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(sw, []byte("registration.unregister()")) || bytes.Contains(sw, []byte(`"fetch"`)) {
+		t.Error("moved/sw.js must only retire the old service worker")
 	}
 }

@@ -2353,3 +2353,56 @@ chosen: signing with your own certificate in the browser.
 - Screenshots of the assembled site served over HTTP: home (1200 px),
   app, docs, and home and app at 390 px in iframes. Consistent top bar,
   no overflow.
+
+### Phase 31, continued — the website in its own repository (2026-11-16)
+
+The user asked for the website to live in a separate GitHub repository,
+which they create and push; I prepare the folder. Choices (asked): the whole
+website moves (home page, app, docs); the library keeps the app, so
+`c2paseal serve` still works and the website builds the app from the
+library at a pinned release.
+
+**Website folder** (`../c2paseal-website`, a new git repository, committed
+locally, not pushed): `site/` (home page, no scripts; CSP `script-src
+'none'`), `docs/` (moved from here; links to library files are now GitHub
+URLs), `tools/docsite` (moved from scripts/docsite; a relative link must name
+a docs page; with `-library` or `C2PASEAL_LIBRARY`, links into the library
+are checked against a checkout), `scripts/build.sh` (site + the library's
+web/site/app + the WebAssembly build + docs → one folder), `LIBRARY_VERSION`
+(v0.7.0), `.github/workflows/pages.yml` (checks out the library at that
+version; vet, tests, build; deploys main), README, LICENSE. Assumed repo
+name: c2paseal-website (the URL is `web.WebsiteURL` here, and in the
+website's docs and README).
+
+**Library**
+- `web/site` keeps only the app. `serve`: `/` → `/app/`, `/docs/…` → the
+  website. `web.WebsiteURL`. The app links to the docs relatively
+  (`../docs/`), which works on the website. The serve message names /app/.
+- `docs/` and `scripts/docsite` removed (now in the website repo).
+- `web/moved/`: the redirect site for the old address, published by the
+  `pages` workflow (now only that). `moved.js` maps each old path to the
+  same page on the new site (`?store=` → app#recover); `404.html` covers
+  any path; `sw.js` retires the old offline worker (all `c2paseal-*`
+  caches). Never deployed: the /app/ layout of 130ad52 was not pushed, so
+  only the original root worker exists in the wild.
+- README, doc.go and CLI help link to the new website. RELEASING step 3:
+  raise the website's LIBRARY_VERSION after a release.
+
+**Fuzz**: the nightly run also flagged `container/webp` FuzzStripInsert. A
+RIFF whose size ends one byte before the file, with the last chunk
+missing its pad byte: Insert correctly adds the pad at the RIFF end,
+before the trailing byte. The test only allowed the pad at the file end.
+The check is now exact (pad at the RIFF end, size + 1). The input is a
+seed; 90 s of fuzzing found nothing more (3a988ee).
+
+**Audit of Phases 0–31**: every past "needs the user" item is done (all
+releases v0.1.0–v0.6.0 green, module tags pushed; v0.5.0/v0.6.0 releases
+re-run 2026-11-16, green). The sealsvc and sealstore images pull
+anonymously (public). Still open, both needing the user: the Phase 20
+camera photo, and gate I / v0.7.0.
+
+**Tests**: web (redirects, TestMovedSite, TestAppCacheName,
+TestUserTrustList), TestSite in headless Chrome (both engines, offline,
+recovery, trust list), core vet/staticcheck/tests; website: docsite tests
+with every library link checked against this checkout; build.sh produces
+the full site.

@@ -105,7 +105,6 @@ type Options struct {
 	Rand io.Reader
 }
 
-// Option errors.
 // SoftBinding is one soft binding to record (see Options.SoftBindings).
 type SoftBinding struct {
 	// Alg names the algorithm: from the C2PA soft binding algorithm list,
@@ -115,6 +114,7 @@ type SoftBinding struct {
 	Value string
 }
 
+// Option errors.
 var (
 	ErrNoSigner     = errors.New("sign: no signing certificate or key")
 	ErrKeyMismatch  = errors.New("sign: private key does not match the signing certificate")

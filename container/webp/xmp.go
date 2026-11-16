@@ -13,6 +13,8 @@ const (
 	flagAlpha = 0x10
 )
 
+// ErrNoImage is returned by SetXMP for a file without a VP8 or VP8L image
+// chunk, whose dimensions a VP8X header needs.
 var ErrNoImage = errors.New("no VP8 or VP8L image chunk")
 
 // XMP returns the data of the "XMP " chunk, if there is one.

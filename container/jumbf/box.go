@@ -47,6 +47,7 @@ var (
 // UUID is a 16-byte JUMBF content-type identifier.
 type UUID [16]byte
 
+// String formats u in the 8-4-4-4-12 hexadecimal form.
 func (u UUID) String() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:16])
 }

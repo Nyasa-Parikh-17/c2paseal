@@ -47,6 +47,8 @@ func DefaultExclusions() []Exclusion {
 	}
 }
 
+// ErrBadExclusion is returned when exclusions do not fit the file: a data
+// match or a range past its end, or nothing left to hash.
 var ErrBadExclusion = errors.New("exclusion does not fit the file")
 
 // hashRange is a byte range to leave out, or with marker set, a top-level

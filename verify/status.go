@@ -10,6 +10,8 @@ const (
 	Failure
 )
 
+// String returns the validation_results group: "success",
+// "informational" or "failure".
 func (k Kind) String() string {
 	switch k {
 	case Success:

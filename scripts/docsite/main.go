@@ -479,8 +479,8 @@ func layout(pages []page, cur page, body string) string {
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="index.html">C2paSeal <span>docs</span></a>
-  <nav class="links"><a href="../">Web app</a><a href="%s">GitHub</a></nav>
+  <a class="brand" href="../"><img src="../icon.svg" alt="" width="22" height="22"> C2paSeal</a>
+  <nav class="links" aria-label="Site"><a href="../app/">Check an image</a><a href="../app/#sign">Sign</a><a href="index.html" aria-current="page">Docs</a><a href="%s">GitHub</a></nav>
 </header>
 <div class="wrap">
 <nav class="side" aria-label="Documentation">
@@ -514,10 +514,12 @@ const css = `:root {
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
 a { color: var(--accent); }
-.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
-.brand { font-weight: 700; text-decoration: none; color: var(--text); font-size: 1.1rem; }
-.brand span { color: var(--muted); font-weight: 400; }
-.links a { margin-left: 16px; text-decoration: none; }
+/* The site's top bar: the same look as web/site/site.css and the app. */
+.top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; text-decoration: none; color: var(--text); font-size: 1.1rem; }
+.links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.links a { text-decoration: none; }
+.links a[aria-current="page"] { font-weight: 600; color: var(--text); }
 .wrap { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
 .side { position: sticky; top: 16px; align-self: start; font-size: .94rem; }
 .side ul { list-style: none; margin: 0 0 12px; padding: 0; }

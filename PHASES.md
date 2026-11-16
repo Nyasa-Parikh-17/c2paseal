@@ -685,9 +685,15 @@ Tasks:
   - A guide per component.
   - An honest "what C2PA does and does not prove" page.
 - An examples repository.
+- Added with the user's approval on 2026-11-16: one website, with a home
+  page at the root, the app at `/app/`, a shared top bar across the home
+  page, the app and the docs, and loading your own trust list in the app
+  (PENDING_APPROVAL.md item A1).
 
 Done when:
 - A new user gets through the quickstart in under 5 minutes.
+- The home page, the app and the docs link to each other, and a file signed
+  under a trust list loaded in the app shows as Trusted (browser test).
 - The release workflow is green for `v0.7.0`.
 
 ### STOP — human gate I

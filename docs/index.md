@@ -7,7 +7,7 @@ external tool at run time.
 
 **New here?** The [quickstart](quickstart.md) signs and verifies your first
 image in under five minutes. To see it without installing anything, open
-the [web app](https://nyasa-parikh-17.github.io/c2paseal/). It runs in your
+the [web app](https://nyasa-parikh-17.github.io/c2paseal/app/). It runs in your
 browser, and your files stay on your machine.
 
 ## Pick your starting point

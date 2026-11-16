@@ -92,7 +92,7 @@ func TestSite(t *testing.T) {
 	t.Run("wasm", func(t *testing.T) {
 		wasm := wasmFile(t)
 		wasmExec := filepath.Join(goEnv(t, "GOROOT"), "lib", "wasm", "wasm_exec.js")
-		static := http.FileServerFS(web.Site())
+		static := http.FileServerFS(web.App())
 		app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/c2paseal.wasm":
@@ -104,7 +104,7 @@ func TestSite(t *testing.T) {
 				static.ServeHTTP(w, r)
 			}
 		})
-		rep := runSite(t, chrome, app, true)
+		rep := runSite(t, chrome, app, true, true)
 		if rep.Mode != "wasm" || !strings.Contains(rep.Where, "Files are not uploaded") {
 			t.Errorf("mode %q, where %q; want the WebAssembly engine", rep.Mode, rep.Where)
 		}
@@ -150,7 +150,8 @@ func TestSite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rep := runSite(t, chrome, web.Handler(cfg), false)
+		// serve's handler is the whole website, with the app at /app/.
+		rep := runSite(t, chrome, web.Handler(cfg), false, false)
 		if rep.Mode != "server" || !strings.Contains(rep.Where, "c2paseal serve") {
 			t.Errorf("mode %q, where %q; want the HTTP API engine", rep.Mode, rep.Where)
 		}
@@ -212,6 +213,14 @@ type siteReport struct {
 	Recover        shown   `json:"recover"`
 	RecoverNone    shown   `json:"recoverNone"`
 	Controlled     bool    `json:"controlled"`
+	TrustListState string  `json:"trustListState"`
+	TrustList      struct {
+		shown
+		Meta string `json:"meta"`
+	} `json:"trustList"`
+	TrustListBad     string `json:"trustListBad"`
+	TrustListCleared string `json:"trustListCleared"`
+	HashTab          bool   `json:"hashTab"`
 	Offline        *struct {
 		Mode   string `json:"mode"`
 		Verify shown  `json:"verify"`
@@ -222,9 +231,11 @@ type siteReport struct {
 	recoverID     string // the watermark ID of the recovery sample
 }
 
-// runSite serves app under /app/ (as GitHub Pages serves the site under
-// /c2paseal/) next to the test page, and returns what the page reports.
-func runSite(t *testing.T, chrome string, app http.Handler, offline bool) *siteReport {
+// runSite serves app under /app/ next to the test page, and returns what the
+// page reports. With strip, app gets paths without the /app prefix (it is
+// the app alone, as at a subpath on GitHub Pages); without, app is the whole
+// website and serves the app at /app/ itself.
+func runSite(t *testing.T, chrome string, app http.Handler, offline, strip bool) *siteReport {
 	t.Helper()
 	page, err := os.ReadFile(filepath.Join("testdata", "site.html"))
 	if err != nil {
@@ -237,14 +248,18 @@ func runSite(t *testing.T, chrome string, app http.Handler, offline bool) *siteR
 	var servedOffline atomic.Int64
 	got := make(chan siteReport, 1)
 	mux := http.NewServeMux()
-	mux.Handle("/app/", http.StripPrefix("/app", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var appHandler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if off.Load() {
 			servedOffline.Add(1)
 			http.Error(w, "offline", http.StatusServiceUnavailable)
 			return
 		}
 		app.ServeHTTP(w, r)
-	})))
+	})
+	if strip {
+		appHandler = http.StripPrefix("/app", appHandler)
+	}
+	mux.Handle("/app/", appHandler)
 	mux.HandleFunc("GET /__test/{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(page)
@@ -310,9 +325,29 @@ func checkSite(t *testing.T, rep *siteReport, anchors []*x509.Certificate) {
 	for i, c := range siteCases {
 		t.Run(c.Name, func(t *testing.T) { checkShown(t, rep.Verify[i], c) })
 	}
+	t.Run("your trust list", func(t *testing.T) {
+		if !strings.Contains(rep.TrustListState, "roots.pem, 1 certificate") {
+			t.Errorf("trust list state %q", rep.TrustListState)
+		}
+		s := rep.TrustList
+		if s.State != "valid" || s.Title != "Valid, trusted signer" || !strings.Contains(s.Meta, "your trust list (roots.pem)") || strings.Contains(s.Meta, "demo root") {
+			t.Errorf("with the user's trust list: %q %q, meta %q", s.State, s.Title, s.Meta)
+		}
+		if !strings.Contains(rep.TrustListBad, "No certificates in notes.txt") {
+			t.Errorf("bad trust list message %q", rep.TrustListBad)
+		}
+		if rep.TrustListCleared != "none loaded" {
+			t.Errorf("after Remove: %q", rep.TrustListCleared)
+		}
+	})
+	t.Run("tabs follow the URL", func(t *testing.T) {
+		if !rep.HashTab {
+			t.Error("#recover did not show the Recover tab")
+		}
+	})
 	t.Run("sign the sample", func(t *testing.T) {
 		if !rep.SignTabVisible {
-			t.Error("the Sign tab did not show")
+			t.Error("the Sign tab did not show (or the URL did not become #sign)")
 		}
 		if len(rep.Sign) != 2 {
 			t.Fatalf("got %d sign results, want 2 (sample, again)", len(rep.Sign))

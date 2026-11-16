@@ -71,8 +71,47 @@
       result.verify.push({ name: c.name, ...(await shown(ctx, "result-verify")) });
     }
 
+    // Your trust list: load the test root as the user's own list; a signed
+    // file is then Trusted with the demo box off. Then a bad file, then
+    // remove the list.
+    {
+      await ctx.app.whenIdle();
+      const state = () => ctx.doc.getElementById("trustlist-state").textContent;
+      const load = async (name, text) => {
+        const input = ctx.doc.getElementById("trustlist-file");
+        const dt = new ctx.win.DataTransfer();
+        dt.items.add(new ctx.win.File([text], name, { type: "text/plain" }));
+        input.files = dt.files;
+        input.dispatchEvent(new ctx.win.Event("change"));
+      };
+      await load("roots.pem", await (await fetch("/__test/f/pki/trust-anchors.pem")).text());
+      for (let i = 0; i < 200 && !state().includes("roots.pem"); i++) await sleep(25);
+      result.trustListState = state();
+      await sleep(10);
+      await ctx.app.whenIdle(); // the recheck of the last file
+      ctx.doc.getElementById("trust").checked = false;
+      const bytes = new Uint8Array(await (await fetch("/__test/f/signed/small.jpg")).arrayBuffer());
+      drop(ctx, ctx.doc.getElementById("drop"), "small.jpg", bytes);
+      await sleep(10);
+      result.trustList = await shown(ctx, "result-verify");
+      result.trustList.meta = ctx.doc.querySelector("#result-verify .panel > .meta").textContent;
+      await load("notes.txt", "not a trust list");
+      for (let i = 0; i < 100 && ctx.doc.getElementById("trustlist-error").hidden; i++) await sleep(25);
+      result.trustListBad = ctx.doc.getElementById("trustlist-error").textContent;
+      ctx.doc.getElementById("trustlist-clear").click();
+      await sleep(10);
+      await ctx.app.whenIdle();
+      result.trustListCleared = state();
+    }
+
+    // Tabs follow the URL: the site's top bar links to #sign and #recover.
+    ctx.win.location.hash = "#recover";
+    await sleep(50);
+    result.hashTab = !ctx.doc.getElementById("pane-recover").hidden;
+
     ctx.doc.getElementById("tab-sign").click();
-    result.signTabVisible = !ctx.doc.getElementById("pane-sign").hidden && ctx.doc.getElementById("pane-verify").hidden;
+    result.signTabVisible = !ctx.doc.getElementById("pane-sign").hidden && ctx.doc.getElementById("pane-verify").hidden &&
+      ctx.win.location.hash === "#sign";
     ctx.doc.getElementById("sign-sample").click();
     await sleep(10);
     result.sign.push({ name: "sample", ...(await shown(ctx, "result-sign")) });

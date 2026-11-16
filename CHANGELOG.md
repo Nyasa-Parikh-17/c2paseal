@@ -28,6 +28,21 @@ before v1.0.0 a minor version may change the API.
   watermark-recover, each with a test.
 - `PENDING_APPROVAL.md` (image features awaiting a decision),
   `FUTURE_SCOPE.md` and `RELEASING.md`.
+- **One website**: a home page at the root of the Pages site. The app
+  (check and sign images) moves to `/app/`, and the docs are at `/docs/`.
+  All three share one top bar. App tabs can be linked: `/app/#sign`,
+  `/app/#recover`.
+- **Your trust list** in the app: load a PEM file of trust anchors (such as
+  the official C2PA trust list). It is used on every tab, kept in the
+  browser and never uploaded. Under `c2paseal serve` it is sent with each
+  check (form field `anchors`).
+
+### Changed
+- The app's address is now `/app/`. Old links with `?store=` are forwarded
+  there, and a service worker at the root retires the app's old offline
+  cache. `c2paseal serve` serves the whole website; its API moved to
+  `/app/api/verify` and `/app/api/sign`. `web.App()` is the app alone;
+  `web.Site()` is the website.
 
 ### Fixed
 - `container/bmff`: `Insert` refuses a file whose `ftyp` box has size 0

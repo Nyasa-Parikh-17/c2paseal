@@ -2306,3 +2306,50 @@ the standard library; self-hosted only.
 - Gate I: docs site and Action demo; the "new user in under 5 minutes"
   check is best done by a person following the quickstart once the v0.6.0
   release assets exist. Then ask before v0.7.0.
+
+### Phase 31, continued — one website (2026-11-16)
+
+The user asked for "a website: docs site + a page where people can put an
+image to check/sign". Both existed (the app at the Pages root, the docs
+at /docs/). Asked which additions; the user chose: shared navigation, a
+home page (app moves to /app/), and loading your own trust list
+(PENDING_APPROVAL.md A1, approved, recorded in PHASES.md Phase 31). Not
+chosen: signing with your own certificate in the browser.
+
+**Built**
+- `web/site/` is the website: `index.html` (home: hero, Check / Sign /
+  Recover cards, developer links, "what a check tells you"), `site.css`,
+  `home.js` (forwards old `?store=` links to `app/…#recover`), `sw.js`
+  (retires the old root service worker: deletes its `c2paseal-*` caches
+  but not `c2paseal-app-*`, unregisters, reloads its pages). The app moved
+  to `web/site/app/`. Its cache is now `c2paseal-app-<version>`.
+- One top bar (Check an image · Sign · Docs · GitHub) on the home page, the
+  app and the docs. `aria-current` marks the page, or the Sign tab.
+- App: tabs follow the URL hash (`#sign`, `#recover`). "Your trust list"
+  panel: load a PEM file (certificates counted; checked by the WebAssembly
+  engine before use); saved in localStorage, or for this visit only if it
+  does not fit; used on all three tabs with or without the demo root;
+  results say which anchors were used (computed in the page, since
+  `trusted_test_root` only means "some anchors"). Remove clears it.
+- `web`: `App()`; `Handler` serves the whole website; the API moved to
+  `/app/api/{verify,sign}` and takes `anchors` (PEM; a bad list → 400).
+- Pages builds the wasm and wasm_exec.js into `_site/app/`.
+- docs/web-app.md rewritten (the three addresses, your trust list, serve);
+  links to the app point at /app/.
+
+**Tests**
+- web: TestPageAndErrors (home page links to the app; the app has TEST ONLY
+  and the trust list control; CSP header and meta on both; asset types at
+  their new paths), TestRootServiceWorker, TestUserTrustList (anchors →
+  Trusted; bad PEM → 400), TestServiceWorkerAssets over `App()`.
+- TestSite in headless Chrome, both engines: load the test root as "your
+  trust list" → a signed file is "Valid, trusted signer" with the demo box
+  off, and the result says "your trust list (roots.pem)"; a non-PEM file is
+  refused with a message; Remove → "none loaded"; `#recover` shows the
+  Recover tab; the Sign tab sets `#sign`. All earlier cases, recovery and
+  offline pass.
+- cmd/c2paseal TestServe checks /app/. Core vet, staticcheck and tests pass;
+  examples and sealstore pass.
+- Screenshots of the assembled site served over HTTP: home (1200 px),
+  app, docs, and home and app at 390 px in iframes. Consistent top bar,
+  no overflow.

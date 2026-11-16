@@ -67,13 +67,13 @@ scheduling any of these.
 | W3 | **C2PA Soft Binding Resolution API** in `sealstore` | Other C2PA tools could look manifests up in sealstore | M | Follow the spec's API exactly; more endpoints to secure |
 | W4 | **Recovery in `c2paseal serve`** | The local web app's Recover tab works (today: only the Pages build) | S | Needs the watermark in the core module, which brings `golang.org/x/image`. Requires changing hard rule 2 |
 
-## Web app
+## Approved and built
 
-| # | Item | Why | Size | Cost / risk |
-|---|---|---|---|---|
-| A1 | **Load your own trust list in the browser** (for example the official C2PA list) and keep it between visits | Today the app trusts the demo root or nothing, so real files show "signer not on your trust list" | S | — |
+| # | Item | When |
+|---|---|---|
+| A1 | **Load your own trust list in the browser** and keep it between visits | Approved 2026-11-16, built in Phase 31 (see docs/web-app.md) |
 
 ## How to approve
 
-Say which items, for example "approve S1 and A1". Each approved item gets
+Say which items, for example "approve S1 and S5". Each approved item gets
 its own phase in PHASES.md, with a "Done when" check, before work starts.

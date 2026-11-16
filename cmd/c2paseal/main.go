@@ -346,7 +346,7 @@ func serveCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		defer cancel()
 		srv.Shutdown(shut)
 	}()
-	fmt.Fprintf(stdout, "C2paSeal demo on http://%s/ (signing with the TEST ONLY PKI in %s; Ctrl+C to stop)\n", ln.Addr(), *pki)
+	fmt.Fprintf(stdout, "C2paSeal website on http://%s/, the app at /app/ (signing with the TEST ONLY PKI in %s; Ctrl+C to stop)\n", ln.Addr(), *pki)
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return c.fail(exitInvalid, fmt.Errorf("c2paseal serve: %w", err))
 	}

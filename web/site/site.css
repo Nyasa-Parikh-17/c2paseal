@@ -1,0 +1,63 @@
+/* The home page. The top bar is shared in look with app/app.css and the
+   docs (scripts/docsite); keep the three in step. */
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1c1c1a; --muted: #5d5d58; --border: #d9d9d4;
+  --accent: #2f5bd3; --accent-text: #ffffff; --soft: #eef3ff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #20201e; --text: #ececea; --muted: #a5a59f; --border: #3a3a36;
+    --accent: #8ab0ff; --accent-text: #10131a; --soft: #1c2438;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #20201e; --text: #ececea; --muted: #a5a59f; --border: #3a3a36;
+  --accent: #8ab0ff; --accent-text: #10131a; --soft: #1c2438;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.topbar .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.topbar nav a { text-decoration: none; }
+.topbar nav a[aria-current="page"] { font-weight: 600; color: var(--text); }
+
+main { max-width: 1000px; margin: 0 auto; padding: 0 16px 48px; }
+.hero { padding: 56px 0 32px; max-width: 760px; }
+.hero h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.01em; }
+.lead { font-size: 1.12rem; color: var(--muted); margin: 0 0 24px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.button { display: inline-block; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); text-decoration: none; font-weight: 600; }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.button:hover { border-color: var(--accent); }
+.fine { color: var(--muted); font-size: .92rem; margin-top: 14px; }
+
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 16px 0 40px; }
+.card { display: block; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
+  color: var(--text); text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card h2 { margin: 0 0 6px; font-size: 1.15rem; color: var(--accent); }
+.card p { margin: 0; color: var(--muted); font-size: .97rem; }
+
+.dev h2, .honest h2 { font-size: 1.3rem; margin: 0 0 8px; }
+.dev > p { color: var(--muted); max-width: 760px; }
+.devgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 40px; }
+.devgrid a { display: block; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  text-decoration: none; color: var(--text); }
+.devgrid a:hover { border-color: var(--accent); }
+.devgrid strong { display: block; }
+.devgrid span { display: block; color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.honest { padding: 18px 20px; border-radius: 14px; background: var(--soft); border-left: 3px solid var(--accent); }
+.honest p { margin: 0; }
+
+.sitefoot { border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; text-align: center; padding: 18px 16px; }
+
+@media (max-width: 760px) {
+  .hero { padding-top: 32px; }
+  .cards, .devgrid { grid-template-columns: minmax(0, 1fr); }
+}

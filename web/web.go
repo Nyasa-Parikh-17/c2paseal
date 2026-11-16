@@ -1,11 +1,12 @@
-// Package web serves the C2paSeal demo app: drop an image, see its manifest
-// store and validation statuses, sign it with the TEST ONLY PKI and see the
-// re-verified result.
+// Package web serves the C2paSeal website: a home page, and the app at
+// app/ (drop an image, see its manifest store and validation statuses, sign
+// it with the TEST ONLY PKI and see the re-verified result).
 //
-// The app is the static site in site/, the same one deployed to GitHub
-// Pages. There it runs the library as WebAssembly; served from here it has
-// no c2paseal.wasm and uses this package's HTTP API instead, which returns
-// the same JSON (package internal/analysis builds it for both).
+// The website is the static site in site/, the same one deployed to GitHub
+// Pages (where the docs are added at docs/). There the app runs the library
+// as WebAssembly; served from here it has no c2paseal.wasm and uses this
+// package's HTTP API instead, which returns the same JSON (package
+// internal/analysis builds it for both).
 package web
 
 import (
@@ -28,14 +29,26 @@ import (
 //go:embed site
 var siteFS embed.FS
 
-// Site is the static web app: index.html, its script, style and service
-// worker, and the TEST ONLY demo PKI and sample image under demo/. Deploying
-// it needs c2paseal.wasm and wasm_exec.js next to index.html (see the pages
-// workflow); without them the app uses the HTTP API of Handler.
+// Site is the static website: the home page (index.html, site.css,
+// home.js), a service worker that retires the one the app used to register
+// at the root (sw.js), and the app under app/ (see App).
 func Site() fs.FS {
 	sub, err := fs.Sub(siteFS, "site")
 	if err != nil {
 		panic(err) // the embedded directory is always there
+	}
+	return sub
+}
+
+// App is the web app, Site's app/ folder: index.html, its script, style and
+// service worker, and the TEST ONLY demo PKI and sample image under demo/.
+// Deploying it needs c2paseal.wasm and wasm_exec.js next to its index.html
+// (see the pages workflow); without them the app uses the HTTP API of
+// Handler.
+func App() fs.FS {
+	sub, err := fs.Sub(siteFS, "site/app")
+	if err != nil {
+		panic(err)
 	}
 	return sub
 }
@@ -98,12 +111,13 @@ type SignedFile = analysis.SignedFile
 
 // Handler returns the demo's HTTP handler:
 //
-//	GET  /            the static site (Site), index.html at /
-//	POST /api/verify  analyse an uploaded file (multipart field "file")
-//	POST /api/sign    sign it with the test PKI and analyse the result
+//	GET  /                the website (Site): the home page at /, the app at /app/
+//	POST /app/api/verify  analyse an uploaded file (multipart field "file")
+//	POST /app/api/sign    sign it with the test PKI and analyse the result
 //
-// Both POST endpoints take an optional form field trust=1 to trust the test
-// root.
+// Both POST endpoints take optional form fields: trust=1 to trust the test
+// root, and anchors, PEM trust anchors (the user's trust list) to trust as
+// well.
 func Handler(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
 	static := http.FileServerFS(Site())
@@ -115,20 +129,20 @@ func Handler(cfg *Config) http.Handler {
 		}
 		static.ServeHTTP(w, r)
 	})
-	mux.HandleFunc("POST /api/verify", func(w http.ResponseWriter, r *http.Request) {
-		name, b, trust, err := upload(w, r)
+	mux.HandleFunc("POST /app/api/verify", func(w http.ResponseWriter, r *http.Request) {
+		name, b, anchors, err := upload(w, r, cfg)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, analysis.Analyse(name, b, trustAnchors(cfg, trust)))
+		writeJSON(w, analysis.Analyse(name, b, anchors))
 	})
-	mux.HandleFunc("POST /api/sign", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /app/api/sign", func(w http.ResponseWriter, r *http.Request) {
 		if cfg == nil || cfg.Signer == nil {
 			writeError(w, http.StatusServiceUnavailable, errors.New("no signing key configured"))
 			return
 		}
-		name, b, trust, err := upload(w, r)
+		name, b, anchors, err := upload(w, r, cfg)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -139,39 +153,44 @@ func Handler(cfg *Config) http.Handler {
 			return
 		}
 		out := analysis.SignedName(name)
-		a := analysis.Analyse(out, signed, trustAnchors(cfg, trust))
+		a := analysis.Analyse(out, signed, anchors)
 		a.Signed = &SignedFile{Name: out, Data: signed}
 		writeJSON(w, a)
 	})
 	return mux
 }
 
-func trustAnchors(cfg *Config, trust bool) []*x509.Certificate {
-	if !trust || cfg == nil {
-		return nil
-	}
-	return cfg.Anchors
-}
-
-// upload reads the multipart "file" field and the "trust" flag.
-func upload(w http.ResponseWriter, r *http.Request) (string, []byte, bool, error) {
+// upload reads the multipart "file" field, and the trust anchors to use:
+// the test root with trust=1, plus any PEM in the "anchors" field.
+func upload(w http.ResponseWriter, r *http.Request, cfg *Config) (string, []byte, []*x509.Certificate, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUpload+1<<20)
 	if err := r.ParseMultipartForm(MaxUpload); err != nil {
-		return "", nil, false, fmt.Errorf("read upload: %w", err)
+		return "", nil, nil, fmt.Errorf("read upload: %w", err)
 	}
 	f, h, err := r.FormFile("file")
 	if err != nil {
-		return "", nil, false, fmt.Errorf("no file uploaded: %w", err)
+		return "", nil, nil, fmt.Errorf("no file uploaded: %w", err)
 	}
 	defer f.Close()
 	b, err := io.ReadAll(io.LimitReader(f, MaxUpload+1))
 	if err != nil {
-		return "", nil, false, fmt.Errorf("read upload: %w", err)
+		return "", nil, nil, fmt.Errorf("read upload: %w", err)
 	}
 	if len(b) > MaxUpload {
-		return "", nil, false, fmt.Errorf("file larger than %d MB", MaxUpload>>20)
+		return "", nil, nil, fmt.Errorf("file larger than %d MB", MaxUpload>>20)
 	}
-	return filepath.Base(h.Filename), b, r.FormValue("trust") == "1", nil
+	var anchors []*x509.Certificate
+	if r.FormValue("trust") == "1" && cfg != nil {
+		anchors = append(anchors, cfg.Anchors...)
+	}
+	if pem := r.FormValue("anchors"); pem != "" {
+		user, err := c2paseal.ParseTrustAnchors([]byte(pem))
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("your trust list: %w", err)
+		}
+		anchors = append(anchors, user...)
+	}
+	return filepath.Base(h.Filename), b, anchors, nil
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

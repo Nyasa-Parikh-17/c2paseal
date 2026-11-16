@@ -12,7 +12,7 @@ Credentials in **JPEG, PNG, WebP, HEIC and AVIF** images. It builds with
 `CGO_ENABLED=0` into one static binary or a Go package, with no Rust
 toolchain, C library or external tool.
 
-**[Try it in your browser →](https://nyasa-parikh-17.github.io/c2paseal/)**
+**[Try it in your browser →](https://nyasa-parikh-17.github.io/c2paseal/app/)**
 It is the same library compiled to WebAssembly. Your files never leave your
 machine.
 

@@ -1,7 +1,7 @@
 name: pages
 
-# Builds the web app (web/site plus the WebAssembly build) and the docs site
-# (docs/, at /docs/) and deploys them to
+# Builds the website (web/site: the home page, and the app at /app/ with the
+# WebAssembly build) and the docs site (docs/, at /docs/), and deploys them to
 # GitHub Pages. The repository's Pages source must be "GitHub Actions"
 # (Settings → Pages), once.
 
@@ -38,17 +38,18 @@ jobs:
         run: |
           mkdir -p _site
           cp -r web/site/. _site/
-          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../_site/c2paseal.wasm .)
-          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/
+          # The app lives at app/; the WebAssembly build goes next to it.
+          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o ../../_site/app/c2paseal.wasm .)
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" _site/app/
           # The documentation site, from docs/*.md (fails on a broken link).
           go run ./scripts/docsite -src docs -out _site/docs
           # A new cache name per deployment, so browsers replace the old one.
           version="${GITHUB_SHA::12}"
-          sed -i "s/^const VERSION = \"dev\";$/const VERSION = \"$version\";/" _site/sw.js
-          grep -q "^const VERSION = \"$version\";$" _site/sw.js
+          sed -i "s/^const VERSION = \"dev\";$/const VERSION = \"$version\";/" _site/app/sw.js
+          grep -q "^const VERSION = \"$version\";$" _site/app/sw.js
           {
             echo "site: $(du -sb _site | cut -f1) bytes in $(find _site -type f | wc -l) files"
-            echo "c2paseal.wasm: $(wc -c < _site/c2paseal.wasm) bytes, $(gzip -9 -c _site/c2paseal.wasm | wc -c) gzipped"
+            echo "c2paseal.wasm: $(wc -c < _site/app/c2paseal.wasm) bytes, $(gzip -9 -c _site/app/c2paseal.wasm | wc -c) gzipped"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

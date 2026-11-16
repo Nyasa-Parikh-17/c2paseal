@@ -99,3 +99,19 @@ ul.graph ul > li::before { content: ""; position: absolute; left: -18px; top: 20
 
 a.download { display: inline-block; margin: 4px 16px 4px 0; }
 footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
+
+/* Site top bar: the same look as ../site.css and the docs. */
+.topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.topbar .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.topbar nav a { text-decoration: none; }
+.topbar nav a[aria-current="page"] { font-weight: 600; color: var(--text); }
+
+/* Your trust list. */
+.trustlist { margin: 12px 0 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: .94rem; }
+.trustlist summary { cursor: pointer; }
+.trustlist p { margin: 8px 0; color: var(--muted); }
+.trustlist.loaded summary span { color: var(--ok); font-weight: 600; }
+button.plain { font: inherit; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text); cursor: pointer; }
+.trustlist .note[role="alert"] { color: var(--bad); }

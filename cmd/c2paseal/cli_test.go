@@ -80,7 +80,7 @@ func TestServe(t *testing.T) {
 	}()
 	var resp *http.Response
 	for i := 0; i < 50; i++ {
-		if resp, err = http.Get("http://" + addr + "/"); err == nil {
+		if resp, err = http.Get("http://" + addr + "/app/"); err == nil {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -91,7 +91,7 @@ func TestServe(t *testing.T) {
 	page, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if !bytes.Contains(page, []byte("TEST ONLY")) {
-		t.Error("page lacks the TEST ONLY label")
+		t.Error("the app page lacks the TEST ONLY label")
 	}
 	cancel()
 	select {

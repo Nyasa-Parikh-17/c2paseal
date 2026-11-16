@@ -4,87 +4,82 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; worker-src 'self'; base-uri 'none'; form-action 'none'">
-<meta name="description" content="Check and add C2PA Content Credentials in JPEG, PNG, WebP, HEIC and AVIF files. Files stay in your browser.">
-<title>C2paSeal</title>
+<meta name="description" content="Check and add C2PA Content Credentials in JPEG, PNG, WebP, HEIC and AVIF images, in your browser. Open-source Go library, CLI and tools.">
+<title>C2paSeal: check and sign Content Credentials</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css">
-<script src="app.js" defer></script>
+<link rel="stylesheet" href="site.css">
+<script src="home.js" defer></script>
 </head>
 <body>
-<main>
-  <header>
-    <h1>C2paSeal</h1>
-    <p class="lead">Read and validate C2PA Content Credentials in JPEG, PNG, WebP, HEIC and AVIF files, or sign a sample with a demo certificate.</p>
-    <p class="where" id="where" aria-live="polite">Loading the validator…</p>
-  </header>
-
-  <nav class="tabs" role="tablist" aria-label="Mode">
-    <button role="tab" id="tab-verify" aria-controls="pane-verify" aria-selected="true">Verify a file</button>
-    <button role="tab" id="tab-sign" aria-controls="pane-sign" aria-selected="false" tabindex="-1">Sign a sample</button>
-    <button role="tab" id="tab-recover" aria-controls="pane-recover" aria-selected="false" tabindex="-1">Recover credentials</button>
+<header class="topbar">
+  <a class="brand" href="./"><img src="icon.svg" alt="" width="22" height="22"> C2paSeal</a>
+  <nav aria-label="Site">
+    <a href="app/">Check an image</a>
+    <a href="app/#sign">Sign</a>
+    <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/">Docs</a>
+    <a href="https://github.com/Nyasa-Parikh-17/c2paseal">GitHub</a>
   </nav>
+</header>
 
-  <section id="pane-verify" role="tabpanel" aria-labelledby="tab-verify">
-    <label class="drop" id="drop">
-      <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif,.heic,.heif,.avif" disabled>
-      <strong>Drop a JPEG, PNG, WebP, HEIC or AVIF file here</strong> or click to choose one
-    </label>
-    <div class="controls">
-      <label><input type="checkbox" id="trust"> Also trust the TEST ONLY demo root</label>
-      <span class="busy" id="busy-verify" aria-live="polite"></span>
+<main>
+  <section class="hero">
+    <h1>See who signed an image, and whether it changed since.</h1>
+    <p class="lead">C2paSeal reads, verifies and signs <a href="https://c2pa.org">C2PA</a> Content Credentials in
+      JPEG, PNG, WebP, HEIC and AVIF images. Drop a picture to check it. It runs in your browser, so the file never
+      leaves your computer.</p>
+    <div class="cta">
+      <a class="button primary" href="app/">Check an image</a>
+      <a class="button" href="app/#sign">Try signing one</a>
+      <a class="button" href="https://nyasa-parikh-17.github.io/c2paseal/docs/quickstart.html">Quickstart</a>
     </div>
-    <div id="result-verify"></div>
+    <p class="fine">No upload, no account. After the first visit the checker also works offline.</p>
   </section>
 
-  <section id="pane-sign" role="tabpanel" aria-labelledby="tab-sign" hidden>
-    <div class="testonly" role="note"><strong>TEST ONLY demo certificate.</strong> Signing here uses
-      C2paSeal's test PKI, whose private key is published with the source code. Anyone can sign as
-      "C2paSeal Test Signer", so these files say nothing about who made them. Validators report the signer
-      as untrusted unless they are told to trust the demo root.</div>
-    <div class="sample">
-      <img src="demo/sample.jpg" alt="The sample image: an unsigned JPEG" width="160">
-      <div>
-        <p>Sign the sample image (an unsigned test picture), or choose one of your own JPEG, PNG, WebP, HEIC or AVIF files.</p>
-        <div class="controls">
-          <button id="sign-sample" disabled>Sign the sample</button>
-          <label class="pick">or sign your own: <input type="file" id="sign-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif,.heic,.heif,.avif" disabled></label>
-        </div>
-        <div class="controls">
-          <label><input type="checkbox" id="sign-trust"> Trust the demo root when checking the result</label>
-          <span class="busy" id="busy-sign" aria-live="polite"></span>
-        </div>
-      </div>
-    </div>
-    <div id="result-sign"></div>
+  <section class="cards" aria-label="What you can do">
+    <a class="card" href="app/">
+      <h2>Check</h2>
+      <p>Who signed it, when, what was done to it, and its edit history. Every C2PA status code is listed. Load the
+        official C2PA trust list to see which signers are trusted.</p>
+    </a>
+    <a class="card" href="app/#sign">
+      <h2>Sign</h2>
+      <p>Add Content Credentials to your own picture with a demo certificate, then download it and check it anywhere.
+        Real signing uses your own certificate, through the tools below.</p>
+    </a>
+    <a class="card" href="app/#recover">
+      <h2>Recover</h2>
+      <p>Credentials are often stripped when a picture is shared. If it carries a C2paSeal watermark, they can be
+        found again in a manifest store and checked against the copy.</p>
+    </a>
   </section>
 
-  <section id="pane-recover" role="tabpanel" aria-labelledby="tab-recover" hidden>
-    <p>For a copy whose Content Credentials were stripped: if it carries a C2paSeal watermark, its ID finds the
-      manifest in a manifest store (<code>sealstore</code>), which is then verified against this copy.
-      The image is decoded here; only the watermark ID is sent to the store.</p>
-    <div class="controls">
-      <label class="store">Manifest store URL
-        <input type="url" id="store-url" placeholder="https://store.example.com" autocomplete="url" spellcheck="false"></label>
+  <section class="dev">
+    <h2>For developers</h2>
+    <p>The checker is the open-source C2paSeal Go library compiled to WebAssembly. The same library signs in your
+      own systems, with no CGO and no external tools, and its results are checked against c2patool, the C2PA reference
+      tool.</p>
+    <div class="devgrid">
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/cli.html"><strong>Command line</strong><span>sign, verify, inspect</span></a>
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/library.html"><strong>Go library</strong><span>go get github.com/Nyasa-Parikh-17/c2paseal</span></a>
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/middleware.html"><strong>HTTP middleware</strong><span>sign images as they are uploaded</span></a>
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/github-action.html"><strong>GitHub Action</strong><span>check images in CI</span></a>
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/keys.html"><strong>KMS keys</strong><span>AWS and Google Cloud KMS</span></a>
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/sealsvc.html"><strong>Signing service</strong><span>self-hosted signing API</span></a>
     </div>
-    <label class="drop" id="recover-drop">
-      <input type="file" id="recover-file" accept="image/jpeg,image/png,image/webp" disabled>
-      <strong>Drop a JPEG, PNG or WebP copy here</strong> or click to choose one
-    </label>
-    <div class="controls">
-      <label><input type="checkbox" id="recover-trust"> Also trust the TEST ONLY demo root</label>
-      <span class="busy" id="busy-recover" aria-live="polite"></span>
-    </div>
-    <p class="note" id="recover-note" hidden></p>
-    <div id="result-recover"></div>
   </section>
 
-  <footer>
-    <p>C2paSeal is an open-source Go library. Results follow the C2PA 2.4 specification's validation rules;
-      "valid" means the Content Credentials are intact and match the file, not that the picture shows what happened.
-      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/">Documentation</a> ·
-      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/what-c2pa-proves.html">What C2PA does and does not prove</a> ·
-      <a href="https://github.com/Nyasa-Parikh-17/c2paseal">Source</a></p>
-  </footer>
+  <section class="honest">
+    <h2>What a check tells you</h2>
+    <p>A valid result means the credentials are intact and match the picture, and says who signed them. It does
+      <strong>not</strong> mean the picture shows what really happened: C2PA records what the signer claims.
+      <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/what-c2pa-proves.html">What C2PA does and does not prove</a>.</p>
+  </section>
 </main>
+
+<footer class="sitefoot">
+  <p>C2paSeal is open source under the Apache License 2.0 ·
+    <a href="https://github.com/Nyasa-Parikh-17/c2paseal">Source</a> ·
+    <a href="https://nyasa-parikh-17.github.io/c2paseal/docs/">Documentation</a></p>
+</footer>
 </body>
 </html>

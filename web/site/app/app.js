@@ -50,6 +50,22 @@ async function demoFile(name) {
   return demo[name];
 }
 
+// userTrust is the trust list the user loaded ({name, pem, count}), or null.
+// It is added to the anchors of every check, and kept in this browser.
+let userTrust = null;
+const TRUST_KEY = "c2paseal.trustlist";
+
+// anchorsPEM is the PEM text of the trust anchors for a check: the demo root
+// if its box is ticked, and the user's trust list.
+async function anchorsPEM(trustDemo) {
+  const parts = [];
+  if (trustDemo) parts.push(await demoFile("demo-root.pem"));
+  if (userTrust) parts.push(userTrust.pem);
+  return parts.join("\n");
+}
+
+const countCerts = (pem) => (pem.match(/-----BEGIN CERTIFICATE-----/g) || []).length;
+
 async function wasmEngine() {
   const resp = await fetch("c2paseal.wasm");
   if (!resp.ok) return null;
@@ -66,9 +82,14 @@ async function wasmEngine() {
   if (typeof globalThis.c2paseal !== "object") throw new Error("c2paseal.wasm did not start");
   const api = globalThis.c2paseal;
   const analyzeBytes = async (bytes, name, trust, manifestStore) =>
-    JSON.parse(api.analyze(bytes, { name, trustAnchors: trust ? await demoFile("demo-root.pem") : "", manifestStore }));
+    JSON.parse(api.analyze(bytes, { name, trustAnchors: await anchorsPEM(trust), manifestStore }));
   return {
     mode: "wasm",
+    // checkTrust returns an error message if pem is not a usable trust list.
+    checkTrust(pem) {
+      const r = JSON.parse(api.analyze(new Uint8Array(0), { name: "check", trustAnchors: pem }));
+      return r.error ? r.error.replace(/^trustAnchors: /, "") : "";
+    },
     where: "Everything runs in this browser tab (WebAssembly). Files are not uploaded. After the first visit the app also works offline.",
     async analyze(file, trust) {
       return analyzeBytes(new Uint8Array(await file.arrayBuffer()), file.name, trust);
@@ -129,6 +150,7 @@ function serverEngine() {
     const form = new FormData();
     form.append("file", file);
     if (trust) form.append("trust", "1");
+    if (userTrust) form.append("anchors", userTrust.pem);
     try {
       const r = await fetch(path, { method: "POST", body: form });
       const ct = r.headers.get("Content-Type") || "";
@@ -321,7 +343,7 @@ function render(target, a) {
     target.replaceChildren(panel);
     return;
   }
-  panel.append(el("div", "meta", [a.file, a.format || "", a.size ? a.size + " bytes" : "", a.trusted_test_root ? "demo root trusted" : "",
+  panel.append(el("div", "meta", [a.file, a.format || "", a.size ? a.size + " bytes" : "", a.trustNote || "",
     a.recovered ? "from " + a.recovered.store : ""].filter(Boolean).join(" · ")));
 
   const b = banner(a);
@@ -401,9 +423,19 @@ function run(busyId, fn) {
   return idle;
 }
 
+// noted adds to a result which trust anchors its check used, for display.
+function noted(a, trustDemo) {
+  if (a && !a.error) {
+    a.trustNote = [trustDemo ? "demo root trusted" : "", userTrust ? "your trust list (" + userTrust.name + ")" : ""]
+      .filter(Boolean).join(", ");
+  }
+  return a;
+}
+
 function verifyFile(file) {
   lastVerify = file;
-  return run("busy-verify", async () => render($("result-verify"), await engine.analyze(file, $("trust").checked)));
+  const trust = $("trust").checked;
+  return run("busy-verify", async () => render($("result-verify"), noted(await engine.analyze(file, trust), trust)));
 }
 
 // signFile signs the File that getFile resolves to. The fetch for the
@@ -412,7 +444,8 @@ function signFile(getFile) {
   return run("busy-sign", async () => {
     const file = await getFile();
     lastSign = file;
-    const a = await engine.sign(file, $("sign-trust").checked);
+    const trust = $("sign-trust").checked;
+    const a = noted(await engine.sign(file, trust), trust);
     render($("result-sign"), a);
     if (a.signed) {
       // Signing the result again keeps the first manifest as its parent,
@@ -432,7 +465,8 @@ function recoverFile(file) {
       render($("result-recover"), { error: "Enter the manifest store URL first (http:// or https://)." });
       return;
     }
-    render($("result-recover"), await engine.recover(file, store, $("recover-trust").checked));
+    const trust = $("recover-trust").checked;
+    render($("result-recover"), noted(await engine.recover(file, store, trust), trust));
   });
 }
 
@@ -452,24 +486,98 @@ function initStoreURL() {
   });
 }
 
+// --- Your trust list ----------------------------------------------------------
+
+function showTrustList(message) {
+  const loaded = !!userTrust;
+  $("trustlist").classList.toggle("loaded", loaded);
+  $("trustlist-state").textContent = loaded
+    ? userTrust.name + ", " + userTrust.count + (userTrust.count === 1 ? " certificate" : " certificates") + (userTrust.remembered ? "" : " (this visit only)")
+    : "none loaded";
+  $("trustlist-clear").hidden = !loaded;
+  $("trustlist-error").hidden = !message;
+  $("trustlist-error").textContent = message || "";
+}
+
+// recheck runs the current results again, after the trust list changed.
+function recheck() {
+  if (lastVerify) verifyFile(lastVerify);
+  if (lastRecover) recoverFile(lastRecover);
+}
+
+function initTrustList() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TRUST_KEY) || "null");
+    if (saved && typeof saved.pem === "string" && countCerts(saved.pem) > 0) {
+      userTrust = { name: String(saved.name || "trust list"), pem: saved.pem, count: countCerts(saved.pem), remembered: true };
+    }
+  } catch (e) { /* storage unavailable or unreadable */ }
+  showTrustList();
+  $("trustlist-file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    const pem = await f.text();
+    const count = countCerts(pem);
+    const problem = count === 0 ? "No certificates in " + f.name + ": a trust list is PEM text with -----BEGIN CERTIFICATE----- blocks."
+      : engine && engine.checkTrust ? engine.checkTrust(pem) : "";
+    if (problem) {
+      showTrustList(problem);
+      return;
+    }
+    userTrust = { name: f.name, pem, count, remembered: false };
+    try {
+      localStorage.setItem(TRUST_KEY, JSON.stringify({ name: f.name, pem }));
+      userTrust.remembered = true;
+    } catch (err) { /* too large or storage unavailable: kept for this visit */ }
+    showTrustList();
+    recheck();
+  });
+  $("trustlist-clear").addEventListener("click", () => {
+    userTrust = null;
+    try {
+      localStorage.removeItem(TRUST_KEY);
+    } catch (e) { /* storage unavailable */ }
+    showTrustList();
+    recheck();
+  });
+}
+
 async function sampleFile() {
   const r = await fetch("demo/sample.jpg");
   return new File([await r.blob()], "sample.jpg", { type: "image/jpeg" });
 }
 
-function selectTab(name) {
-  for (const t of ["verify", "sign", "recover"]) {
+const TABS = ["verify", "sign", "recover"];
+
+// selectTab shows a tab. The URL follows (#sign, #recover), so tabs can be
+// linked to, as the site's top bar does.
+function selectTab(name, updateURL = true) {
+  if (!TABS.includes(name)) name = "verify";
+  for (const t of TABS) {
     const on = t === name;
     $("tab-" + t).setAttribute("aria-selected", String(on));
     $("tab-" + t).tabIndex = on ? 0 : -1;
     $("pane-" + t).hidden = !on;
   }
+  // The top bar marks "Sign" on the Sign tab, "Check an image" otherwise.
+  const [current, other] = name === "sign" ? ["nav-sign", "nav-check"] : ["nav-check", "nav-sign"];
+  $(current).setAttribute("aria-current", "page");
+  $(other).removeAttribute("aria-current");
+  if (updateURL) {
+    history.replaceState(null, "", location.pathname + location.search + (name === "verify" ? "" : "#" + name));
+  }
 }
+
+const tabFromHash = () => location.hash.replace(/^#/, "");
 
 function wire() {
   $("tab-verify").addEventListener("click", () => selectTab("verify"));
   $("tab-sign").addEventListener("click", () => selectTab("sign"));
   $("tab-recover").addEventListener("click", () => selectTab("recover"));
+  window.addEventListener("hashchange", () => selectTab(tabFromHash(), false));
+  selectTab(tabFromHash(), false);
+  initTrustList();
   document.querySelector(".tabs").addEventListener("keydown", (e) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     const tabs = ["verify", "sign", "recover"];

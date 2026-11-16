@@ -110,4 +110,4 @@ reference tool's `c2patool --detailed`.
 - **Real signing:** [Certificates and trust](certificates.md).
 - **Check a folder in CI:** the [GitHub Action](github-action.md).
 - **In the browser:** drop `signed.jpg` on the
-  [web app](https://nyasa-parikh-17.github.io/c2paseal/).
+  [web app](https://nyasa-parikh-17.github.io/c2paseal/app/).

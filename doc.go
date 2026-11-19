@@ -28,7 +28,9 @@
 // Scope: JPEG, PNG, WebP, HEIC and AVIF. Signing is ES256 with a v2 claim
 // and can record soft bindings (c2pa.soft-binding), such as a watermark
 // ID; verifying also accepts ES384, ES512, PS256-512 and Ed25519, and C2PA
-// 1.x (claim v1) files. No video yet. The target C2PA specification
+// 1.x (claim v1) files. Images only: video, audio, PDF and other files give
+// ErrUnsupportedFormat, with a message naming what the file looks like. The
+// target C2PA specification
 // revision is pinned in SPEC.md, and INTEROP.md compares the results with
 // c2patool and other validators.
 //

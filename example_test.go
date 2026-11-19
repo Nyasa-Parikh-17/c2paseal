@@ -74,7 +74,8 @@ func ExampleVerify() {
 	// claim.missing
 }
 
-// Sign embeds a newly signed manifest in a JPEG or PNG. The TEST ONLY
+// Sign embeds a newly signed manifest in a JPEG, PNG, WebP, HEIC or AVIF
+// file. The TEST ONLY
 // certificates in testdata/pki work out of the box; their private key is
 // public, so files signed with them prove nothing.
 func ExampleSign() {
@@ -114,4 +115,73 @@ func ExampleSign() {
 	// title: My picture
 	// generator: C2paSeal
 	// failure: signingCredential.untrusted
+}
+
+// SignAsset signs a file held in memory. With Sidecar the manifest store is
+// kept out of the file and returned, to save next to it as a .c2pa file (or
+// to serve at RemoteURL); VerifyBytes then takes it as ManifestStore.
+func ExampleSignAsset() {
+	chain, key, err := c2paseal.LoadSigner("testdata/pki/leaf-chain.pem", "testdata/pki/leaf.key")
+	if err != nil {
+		log.Fatal(err)
+	}
+	photo, err := os.ReadFile("testdata/unsigned/small.webp")
+	if err != nil {
+		log.Fatal(err)
+	}
+	signed, err := c2paseal.SignAsset(photo, &c2paseal.SignOptions{Chain: chain, Signer: key, Sidecar: true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("file unchanged:", string(signed.File) == string(photo))
+	fmt.Println("sidecar path:", c2paseal.SidecarPath("photos/small.webp"))
+
+	anchors, err := c2paseal.LoadTrustAnchors("testdata/pki/trust-anchors.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := c2paseal.VerifyBytes(signed.File, &c2paseal.VerifyOptions{TrustAnchors: anchors, ManifestStore: signed.Store})
+	fmt.Println("with its sidecar:", r.State())
+	// Output:
+	// file unchanged: true
+	// sidecar path: photos/small.c2pa
+	// with its sidecar: Trusted
+}
+
+// VerifyBytes validates a file held in memory. Bad input is never a Go
+// error: a file C2paSeal cannot handle is reported as Invalid with a
+// general.error status that says what the file looks like. C2paSeal handles
+// images only (JPEG, PNG, WebP, HEIC and AVIF).
+func ExampleVerifyBytes() {
+	mp4 := []byte("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isommp41")
+	r := c2paseal.VerifyBytes(mp4, nil)
+	fmt.Println(r.State())
+	for _, s := range r.Statuses() {
+		fmt.Println(s.Code)
+		fmt.Println(s.Explanation)
+	}
+	// Output:
+	// Invalid
+	// general.error
+	// unsupported file format: the file looks like an MP4 video (or another ISO BMFF file that is not HEIC or AVIF); C2paSeal supports JPEG, PNG, WebP, HEIC and AVIF images only
+}
+
+// DetectFormat names a supported image from its leading bytes, or returns
+// "" for anything else.
+func ExampleDetectFormat() {
+	for _, name := range []string{"small.jpg", "small.png", "small.webp", "sample.heic", "sample.avif"} {
+		b, err := os.ReadFile(filepath.Join("testdata", "unsigned", name))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(name, c2paseal.DetectFormat(b))
+	}
+	fmt.Printf("GIF %q\n", c2paseal.DetectFormat([]byte("GIF89a")))
+	// Output:
+	// small.jpg jpeg
+	// small.png png
+	// small.webp webp
+	// sample.heic heic
+	// sample.avif avif
+	// GIF ""
 }

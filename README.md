@@ -172,8 +172,10 @@ rely on it.
 
 ## Project status
 
-C2paSeal is at **v0.7**. Images are complete for the agreed scope; video
-(MP4/MOV) comes next, then v1.0.0 and the API freeze.
+C2paSeal is at **v0.7**, heading for **v1.0.0: an images-only release**
+(JPEG, PNG, WebP, HEIC and AVIF) with a frozen API. Video, audio and
+documents are not supported; other files get a clear "unsupported file
+format" error that says what the file looks like.
 
 - [CHANGELOG.md](CHANGELOG.md): what changed in each release.
 - [PENDING_APPROVAL.md](PENDING_APPROVAL.md): image features proposed but

@@ -100,6 +100,11 @@ jobs:
       #    disagreement.
       - name: Run the interop harness
         run: go run ./interop -require c2patool,c2pa-mcp -strict
+      # 5. C2paSeal <-> c2patool, per format, both ways (the v1.0.0 check).
+      - name: Two-way interop with c2patool
+        env:
+          C2PASEAL_REQUIRE_C2PATOOL: "1"
+        run: go test -count=1 -run TestTwoWayInterop -v . | tee twoway.txt && sed -n '/| Format/,/^$/p' twoway.txt | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

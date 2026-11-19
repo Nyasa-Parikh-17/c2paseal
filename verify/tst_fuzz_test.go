@@ -13,6 +13,11 @@ import (
 // per-signer checks on it; malformed tokens must give errors or statuses,
 // never a panic. Seeds are the real tokens in the corpus (DigiCert, Adobe).
 func FuzzToken(f *testing.F) {
+	addTokenSeeds(f)
+	f.Fuzz(fuzzToken)
+}
+
+func addTokenSeeds(f *testing.F) {
 	all, _ := fixtures.List()
 	for _, fx := range all {
 		b, err := os.ReadFile(fx.Path)
@@ -36,16 +41,17 @@ func FuzzToken(f *testing.F) {
 		}
 	}
 	f.Add([]byte{0x30, 0x00})
-	f.Fuzz(func(t *testing.T, b []byte) {
-		tok, err := parseToken(b)
-		if err != nil {
-			return
+}
+
+func fuzzToken(t *testing.T, b []byte) {
+	tok, err := parseToken(b)
+	if err != nil {
+		return
+	}
+	for _, s := range tok.signers {
+		if c := tok.cert(s); c != nil {
+			tok.checkSigner(s, c, []byte("data"))
 		}
-		for _, s := range tok.signers {
-			if c := tok.cert(s); c != nil {
-				tok.checkSigner(s, c, []byte("data"))
-			}
-			s.signingTime()
-		}
-	})
+		s.signingTime()
+	}
 }

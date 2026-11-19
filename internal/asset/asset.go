@@ -118,7 +118,7 @@ func Extract(b []byte) (format string, root *jumbf.Box, err error) {
 		}
 		return format, st.Root, nil
 	}
-	return "", nil, ErrUnsupportedFormat
+	return "", nil, Unsupported(b)
 }
 
 // normalize maps a container's own "no manifest" / "multiple stores" errors
@@ -146,7 +146,7 @@ func XMP(b []byte) (packet []byte, ok bool, err error) {
 	case HEIC, AVIF:
 		return nil, false, nil // XMP in a BMFF uuid box is not read yet
 	}
-	return nil, false, ErrUnsupportedFormat
+	return nil, false, Unsupported(b)
 }
 
 // SetXMP returns a copy of a JPEG, PNG or WebP file with its XMP packet
@@ -162,7 +162,7 @@ func SetXMP(b, packet []byte) ([]byte, error) {
 	case HEIC, AVIF:
 		return nil, fmt.Errorf("%w: %s", ErrNoXMP, Detect(b))
 	}
-	return nil, ErrUnsupportedFormat
+	return nil, Unsupported(b)
 }
 
 // RemoteURL returns the dcterms:provenance reference in a file's XMP: the

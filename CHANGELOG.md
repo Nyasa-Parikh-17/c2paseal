@@ -12,7 +12,25 @@ before v1.0.0 a minor version may change the API.
   its permissions. The data is also flushed to disk before the rename, so a
   crash cannot leave an empty output file.
 
+### Added
+- `SECURITY.md`: supported versions, private reporting through GitHub, what
+  counts as a vulnerability.
+- Runnable examples on pkg.go.dev for `SignAsset` (sidecar),
+  `VerifyBytes`, `DetectFormat` and `sign.OpenKey`.
+- CI: a `vulncheck` job runs govulncheck on every module with the latest Go
+  patch release; the interop workflow runs a per-format C2paSeal ↔ c2patool
+  check in both directions (`TestTwoWayInterop`).
+- Tests that random mutations of real time-stamp tokens and signed images
+  are each handled quickly (a crafted file cannot tie up a verifier).
+
 ### Changed
+- **Images only.** Unsupported files now say what they look like and what
+  is supported: *unsupported file format: the file looks like an MP4 video;
+  C2paSeal supports JPEG, PNG, WebP, HEIC and AVIF images only*. This is in
+  the `general.error` status from `Verify`, the error from `Read`, and the
+  error from `Sign` (still `ErrUnsupportedFormat` / `ErrSignFormat` for
+  `errors.Is`). Recognised: MP4, MOV, 3GP and other ISO BMFF files, GIF,
+  TIFF/DNG, BMP, JPEG XL, WAV, AVI, MP3, FLAC, WebM, PDF, ZIP, SVG.
 - Code quality, no change in behaviour or output: the manifest builder is
   split into named steps (assertions, claim, signature), proven byte-identical
   with a fixed random source; one shared image-extension check for the CLI

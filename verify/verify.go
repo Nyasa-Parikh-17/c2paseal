@@ -85,7 +85,7 @@ func File(b []byte, opts *Options) *Result {
 	}
 	switch {
 	case errors.Is(err, asset.ErrUnsupportedFormat):
-		return fail(GeneralError, "unsupported file format")
+		return fail(GeneralError, err.Error())
 	case errors.Is(err, asset.ErrMultipleStores):
 		return fail(ClaimMultiple, "more than one manifest store")
 	case isJUMBFError(err):

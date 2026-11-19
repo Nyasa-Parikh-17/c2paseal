@@ -26,7 +26,9 @@ type Signed struct {
 	Parent bool
 }
 
-// ErrFormat is returned by Asset for a file that is neither JPEG nor PNG.
+// ErrFormat is returned by Asset for a file that is not a JPEG, PNG, WebP,
+// HEIC or AVIF image. The message says what the file looks like when it is
+// a common unsupported format, such as an MP4 video.
 var ErrFormat = errors.New("sign: signing supports JPEG, PNG, WebP, HEIC and AVIF only")
 
 // ErrSidecar is returned by JPEG and PNG when Options.Sidecar is set: they
@@ -51,6 +53,9 @@ func Asset(in []byte, opts *Options) (*Signed, error) {
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen}, &webpContainer{})
 	case asset.HEIC, asset.AVIF:
 		return embed(in, opts, buildConfig{sigLen: esSignatureLen, bmff: true}, &bmffContainer{})
+	}
+	if kind := asset.Describe(in); kind != "" {
+		return nil, fmt.Errorf("%w; the file looks like %s", ErrFormat, kind)
 	}
 	return nil, ErrFormat
 }

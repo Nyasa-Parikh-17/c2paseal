@@ -2453,3 +2453,47 @@ misuse panics; none on input paths).
 
 **Tests**: core with C2PASEAL_REQUIRE_C2PATOOL=1, all other modules, and
 the WebAssembly browser tests: all pass. staticcheck clean.
+
+## Phase 32 — Images-only v1.0.0 (started 2026-11-19)
+
+The user redefined v1.0.0 as images-only (PHASES.md Phase 32; video moved to
+"Later"; CLAUDE.md rule 7 updated) and gave seven points.
+
+1. **Fuzzing.** 25 targets (JPEG, PNG, WebP, BMFF, JUMBF, XMP, CBOR claim /
+   store / assertion / COSE, OCSP, time-stamp token, whole-file verify,
+   external store, sign, watermark), 3 minutes each: no crash, panic or
+   failure. Four targets ran slowly (FuzzToken 106 executions,
+   FuzzExternalStore, FuzzFile, FuzzReadStore). Investigated as a possible
+   hang: a 3-second watchdog never fired; every saved input runs in at most
+   1.2 ms; the same stall happens on Linux. The time goes to the fuzzer
+   minimizing large (~6 KB) interesting inputs, not to our code. Checked the
+   property directly: 200,000 mutated tokens (worst 13 ms) and 20,000
+   mutated signed images in all five formats through File (worst 11 ms).
+   Kept as tests (verify/slowinput_test.go, 2 s per-input bound).
+2. **govulncheck** (v1.1.4) on all 8 modules (wasm with GOOS=js). With the
+   local Go 1.27.1: 12 standard-library vulnerabilities, all fixed in
+   1.27.4. With Go 1.27.4 (what CI and the v0.7.0 release binaries use):
+   none reachable. One informational finding in keys/gcpkms and sealsvc
+   (GO-2026-5932, golang.org/x/crypto/openpgp deprecated; not imported; the
+   only "fix" is an untagged pseudo-version, so not pinned). New CI job
+   `vulncheck`.
+3. **Interop.** New TestTwoWayInterop: c2patool → C2paSeal on all 16
+   c2patool-signed fixtures (same verdict, default and trusted:
+   JPEG 5/5, PNG 3/3, WebP 5/5, HEIC 1/1, AVIF 2/2); C2paSeal → c2patool,
+   signed and re-signed, every format Valid (default) / Trusted (test
+   root). Runs in the interop workflow with c2patool required. The
+   Content Credentials verify site has no API and would mean uploading
+   files to an outside service: sample files prepared for the user in
+   ../c2paseal-verify-samples.
+4. **Unsupported formats**: internal/asset.Describe / Unsupported; wired
+   into Read, Verify (general.error explanation) and Sign. Docs, README,
+   doc.go, FUTURE_SCOPE, PENDING_APPROVAL and the website say images only.
+5. SECURITY.md; examples for SignAsset, VerifyBytes, DetectFormat,
+   sign.OpenKey. README quick start, LICENSE and CHANGELOG already existed.
+6. The release workflow already builds Windows, macOS and Linux binaries
+   (amd64 and arm64), smoke-tests them on each OS and publishes SHA256SUMS;
+   no change.
+7. API review: findings listed for the user; nothing changed yet.
+
+**Not done here (needs the user)**: the verify-site check with the sample
+files; decisions on the API review; the Phase 20 camera photo; then gate J.

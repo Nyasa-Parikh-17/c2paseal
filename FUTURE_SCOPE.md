@@ -11,11 +11,14 @@ Image features waiting for a yes or no are listed in detail in
 
 | Phase | Work |
 |---|---|
-| 32 | MP4 and MOV signing and verification with `c2pa.hash.bmff.v3`, including fragmented MP4 (Merkle-tree hashes over fragments) |
-| 33 | Video in the web app (with size limits) and in `sealsvc`; a full interop pass across all formats and tools; the API freeze and **v1.0.0** compatibility promise |
+| 32 | **v1.0.0, images only** (JPEG, PNG, WebP, HEIC, AVIF): fuzzing, govulncheck, a full interop pass, clear errors for unsupported files, the API review and freeze |
 
 ## Listed as "Later" in PHASES.md (not scheduled)
 
+- **Video** (formerly Phases 32–33, moved after v1.0.0 on 2026-11-19): MP4
+  and MOV signing and verification with `c2pa.hash.bmff.v3`, including
+  fragmented MP4 (Merkle-tree hashes over fragments), then video in the web
+  app and in `sealsvc`.
 - **PDF.** A minimal PDF reader and writer covering only what C2PA needs:
   an embedded-file manifest store attached through an incremental update,
   hard-binding exclusions, a fuzz target, oracle fixtures and interop rows.

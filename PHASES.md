@@ -1,6 +1,6 @@
 # C2paSeal — build phases for Claude Code
 
-34 phases (0–33), each sized for one Claude Code session. Phases 17–33 are in Part 2 at the end of this file. Give Claude Code one phase at a time:
+33 phases (0–32), each sized for one Claude Code session. Phases 17–32 are in Part 2 at the end of this file. Give Claude Code one phase at a time:
 
 > Read CLAUDE.md and PROGRESS.md, then do Phase N from PHASES.md. Stop when its "Done when" checks pass and update PROGRESS.md.
 
@@ -321,7 +321,7 @@ Done when:
 
 ---
 
-# Part 2 — from v0.1.0 to v1.0 (Phases 17–33)
+# Part 2 — from v0.1.0 to v1.0 (Phases 17–32)
 
 Source: `PRODUCT_SPEC.md` (Nyasa Parikh, 2026-11-11). Phase 17 checked that
 spec against PROGRESS.md and INTEROP.md; work already done in Phases 0–16
@@ -703,43 +703,48 @@ Report: docs site, Action demo. Ask before pushing `v0.7.0`.
 
 ---
 
-## Phase 32 — MP4/MOV
+## Phase 32 — Images-only v1.0.0
 
-**Goal:** sign and verify video, built on the Phase 27 BMFF layer.
+Changed by the user on 2026-11-19: v1.0.0 is an **images-only** release
+(JPEG, PNG, WebP, HEIC, AVIF). The former Phases 32 (MP4/MOV) and 33
+(video everywhere) move to "Later"; their non-video parts (a full interop
+pass, the API freeze) are in this phase.
 
-Tasks:
-- MP4 and MOV signing and verification with `c2pa.hash.bmff.v3`,
-  including fragmented MP4 (Merkle-tree hashes over fragments).
-- Fuzz targets, oracle fixtures, and new interop rows.
-
-Done when:
-- Plain and fragmented MP4 signed by us verify in c2patool, and
-  c2patool-signed MP4 files verify in our verifier.
-
----
-
-## Phase 33 — Video everywhere, docs freeze, release v1.0.0
-
-**Goal:** v1.0.
+**Goal:** a v1.0.0 that can be relied on for images.
 
 Tasks:
-- Video in the web app (with size limits) and in sealsvc.
-- A full interop pass across all formats and tools.
-- Freeze the API docs and state the v1 compatibility promise.
+1. Fuzz every parser of untrusted input (JPEG, PNG, WebP, HEIC/AVIF, JUMBF,
+   CBOR, manifest) for a few minutes each; fix crashes and hangs.
+2. govulncheck on every module.
+3. Interop for all five formats both ways (C2paSeal ↔ c2patool), plus the
+   Content Credentials verify site; explain the open camera-photo check.
+4. Video and other unsupported files give a clear "unsupported format"
+   error; docs, README and website say images only.
+5. README quick start (library, CLI, GitHub Action), runnable examples for
+   pkg.go.dev, LICENSE, SECURITY.md, CHANGELOG.
+6. A release workflow that builds CLI binaries for Windows, macOS and Linux.
+7. Review the public API for anything to regret freezing at v1.0.0, and
+   list it for the user before changing anything.
 
 Done when:
-- Full interop passes.
+- All seven are done, and the API changes the user approves are made.
 - The release workflow is green for `v1.0.0`.
 
 ### STOP — human gate J
-Report: full interop matrix and API review. Ask before pushing `v1.0.0`.
+Report: fuzz results, govulncheck, interop matrix, the API review. Ask
+before pushing `v1.0.0`.
 
 ---
 
 ## Later — not scheduled
 
-These items were moved out of Part 2 on 2026-11-12. None of them is built
-without the user's approval.
+These items were moved out of Part 2 on 2026-11-12, and video on
+2026-11-19. None of them is built without the user's approval.
+
+- **Video (formerly Phases 32–33).** MP4 and MOV signing and verification
+  with `c2pa.hash.bmff.v3`, including fragmented MP4 (Merkle-tree hashes
+  over fragments), on the Phase 27 BMFF layer; then video in the web app
+  (with size limits) and in sealsvc.
 
 - **PDF (formerly Phase 28).** A minimal PDF reader and writer covering
   only what C2PA needs: an embedded-file manifest store attached through

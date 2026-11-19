@@ -334,3 +334,28 @@ jobs:
           go vet ./...
           go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
           go test -v ./...
+
+  # Known vulnerabilities (govulncheck) in every module, built with the
+  # latest Go patch release, as the release binaries are. Only
+  # vulnerabilities our code can reach fail the job.
+  vulncheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          vc="$(go env GOPATH)/bin/govulncheck"
+          go version | tee -a "$GITHUB_STEP_SUMMARY"
+          for m in . keys/awskms keys/gcpkms cmd/sealsvc cmd/sealstore watermark examples; do
+            echo "::group::$m"
+            (cd "$m" && "$vc" ./...)
+            echo "::endgroup::"
+          done
+          echo "::group::cmd/c2paseal-wasm (js/wasm)"
+          (cd cmd/c2paseal-wasm && GOOS=js GOARCH=wasm "$vc" ./...)
+          echo "::endgroup::"

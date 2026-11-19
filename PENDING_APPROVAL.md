@@ -9,7 +9,8 @@ it would cost. Sizes: **S** about one phase or less, **M** one to two
 phases, **L** several phases or open research.
 
 Longer-term and non-image ideas are in [FUTURE_SCOPE.md](FUTURE_SCOPE.md).
-Video (Phases 32–33) is already approved and is not listed here.
+Video is listed in PHASES.md under "Later" (moved after v1.0.0 on
+2026-11-19) and is not repeated here.
 
 ## One open check (needs a file, not a decision)
 

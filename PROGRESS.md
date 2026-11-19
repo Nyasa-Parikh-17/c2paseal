@@ -2415,3 +2415,41 @@ the full site.
   Actions): merged its GitHub initial commit; the website keeps the user's
   MIT license (the library stays Apache-2.0; the README says so). Its
   LIBRARY_VERSION is v0.7.0, so it builds once the v0.7.0 tag exists.
+
+### Code review (2026-11-19)
+
+The user asked whether the library code is clean and to fix any practice
+that needs it. A third-party linter download (errcheck) was refused by the
+permission system, so the review used a one-off analyzer written with the
+standard library only (go/types: ignored error results, errors discarded
+with `_`, function length and complexity), plus staticcheck's full rule set
+(clean), gofmt and vet (clean), and a `panic` audit (only init-time and
+misuse panics; none on input paths).
+
+**Fixed**
+- `writeAtomic` (Sign's output): `os.CreateTemp` makes files 0600 and the
+  rename kept it, so signed files were owner-only on Unix. Confirmed on
+  Linux (WSL) with the old code (`-rw-------`). Now: the replaced file's
+  mode or 0644, and `Sync` before the rename. TestSignFileMode (Unix).
+- `sign/builder.go`: `build` (155 lines, complexity 32) split into
+  `buildAssertions`, `parentIngredient`, `withIngredient`,
+  `softBindingBoxes`, `buildClaim`, `buildSignature`, keeping the order in
+  which randomness is drawn. Checked with a fixed Rand: the placeholder
+  manifest hash and the signed and re-signed sizes for JPEG, PNG, WebP and
+  HEIC are identical before and after.
+- `asset.IsImageName` replaces the copies in the CLI and the Action (the
+  examples and scripts/oracle keep their own on purpose).
+- Stale doc comments (JPEG/PNG only) in c2paseal, sign, verify,
+  internal/asset, internal/fixtures, interop, scripts/dumpstore.
+
+**Reviewed and left as they are**
+- Ignored errors that are Go convention: writes to bytes.Buffer and
+  strings.Builder, HTTP response writes, closing read-only bodies and
+  files, crypto/rand.Read (cannot fail since Go 1.24).
+- Long but linear functions that mirror the specification step by step
+  (verify/profile.go checkProfile: one check per certificate-profile rule;
+  verify/tst.go parseToken; Options.validate): splitting them would make
+  them harder to compare with the spec.
+
+**Tests**: core with C2PASEAL_REQUIRE_C2PATOOL=1, all other modules, and
+the WebAssembly browser tests: all pass. staticcheck clean.

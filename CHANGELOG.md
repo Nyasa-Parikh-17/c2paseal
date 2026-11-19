@@ -3,6 +3,22 @@
 All notable changes to C2paSeal. Versions follow [Semantic Versioning](https://semver.org/);
 before v1.0.0 a minor version may change the API.
 
+## Unreleased
+
+### Fixed
+- `Sign` (and `c2paseal sign`) wrote the signed file with owner-only
+  permissions (0600) on Linux and macOS, because the temporary file's mode
+  survived the rename. A new file now gets 0644, and a replaced file keeps
+  its permissions. The data is also flushed to disk before the rename, so a
+  crash cannot leave an empty output file.
+
+### Changed
+- Code quality, no change in behaviour or output: the manifest builder is
+  split into named steps (assertions, claim, signature), proven byte-identical
+  with a fixed random source; one shared image-extension check for the CLI
+  and the GitHub Action; doc comments that still listed only JPEG and PNG
+  (or JPEG, PNG and WebP) now name all five formats.
+
 ## v0.7.0 — 2026-11-19
 
 ### Added

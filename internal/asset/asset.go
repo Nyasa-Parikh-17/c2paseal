@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path"
+	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/container/bmff"
 	"github.com/Nyasa-Parikh-17/c2paseal/container/jpeg"
@@ -31,7 +33,8 @@ var (
 	ErrMultipleStores    = errors.New("more than one C2PA manifest store")
 )
 
-// Detect returns JPEG or PNG from a file's leading bytes, or "".
+// Detect returns JPEG, PNG, WEBP, HEIC or AVIF from a file's leading bytes,
+// or "".
 func Detect(b []byte) string {
 	switch {
 	case bytes.HasPrefix(b, []byte{0xFF, 0xD8}):
@@ -44,6 +47,18 @@ func Detect(b []byte) string {
 		return bmffFormat(b)
 	}
 	return ""
+}
+
+// IsImageName reports whether a file name has the extension of a supported
+// image: .jpg, .jpeg, .png, .webp, .heic, .heif or .avif, in any case. It
+// decides which files of a folder are processed; the format itself is
+// always detected from the bytes.
+func IsImageName(name string) bool {
+	switch strings.ToLower(path.Ext(strings.ReplaceAll(name, "\\", "/"))) {
+	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif":
+		return true
+	}
+	return false
 }
 
 // bmffFormat names an ISO BMFF image by its ftyp brands: AVIF, or HEIC for
@@ -73,7 +88,7 @@ func IsBMFF(format string) bool { return format == HEIC || format == AVIF }
 // not supported yet.
 var ErrNoXMP = errors.New("writing XMP is not supported for this format")
 
-// Extract returns the parsed manifest store of a JPEG or PNG. A file
+// Extract returns the parsed manifest store of a supported image. A file
 // without one gives ErrNoManifest; more than one gives ErrMultipleStores.
 func Extract(b []byte) (format string, root *jumbf.Box, err error) {
 	format = Detect(b)
@@ -134,8 +149,8 @@ func XMP(b []byte) (packet []byte, ok bool, err error) {
 	return nil, false, ErrUnsupportedFormat
 }
 
-// SetXMP returns a copy of a JPEG or PNG with its XMP packet replaced (or
-// added).
+// SetXMP returns a copy of a JPEG, PNG or WebP file with its XMP packet
+// replaced (or added). HEIC and AVIF give ErrNoXMP.
 func SetXMP(b, packet []byte) ([]byte, error) {
 	switch Detect(b) {
 	case JPEG:
@@ -161,7 +176,7 @@ func RemoteURL(b []byte) (url string, ok bool, err error) {
 	return xmp.Provenance(packet)
 }
 
-// SetRemoteURL returns a copy of a JPEG or PNG whose XMP references url as
+// SetRemoteURL returns a copy of a JPEG, PNG or WebP file whose XMP references url as
 // its manifest store, adding an XMP packet if there is none.
 func SetRemoteURL(b []byte, url string) ([]byte, error) {
 	packet, _, err := XMP(b)

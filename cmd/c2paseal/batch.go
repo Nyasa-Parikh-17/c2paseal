@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
 
@@ -44,15 +44,6 @@ func batchMode(paths []string) bool {
 	}
 	fi, err := os.Stat(paths[0])
 	return err == nil && fi.IsDir()
-}
-
-// isImage reports whether a file name has an extension c2paseal reads.
-func isImage(name string) bool {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif":
-		return true
-	}
-	return false
 }
 
 // entry is one input of a batch run: a file to process, or a path that
@@ -89,7 +80,7 @@ func expand(paths []string, recursive bool) []entry {
 				}
 				return nil
 			}
-			if isImage(d.Name()) && isRegular(path, d) {
+			if asset.IsImageName(d.Name()) && isRegular(path, d) {
 				files = append(files, path)
 			}
 			return nil

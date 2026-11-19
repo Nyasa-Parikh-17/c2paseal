@@ -203,7 +203,7 @@ func Dir() (string, error) {
 	}
 }
 
-// List returns every JPEG and PNG fixture in the corpus, ordered by kind and
+// List returns every image fixture in the corpus, ordered by kind and
 // then name.
 func List() ([]Fixture, error) {
 	root, err := Dir()

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-// SignedFiles returns the bytes of every signed fixture (JPEG and PNG), for
+// SignedFiles returns the bytes of every signed fixture, for
 // seeding fuzz corpora. Errors give an empty list: seeds are optional.
 func SignedFiles() [][]byte {
 	fs, err := ListKind(Signed)

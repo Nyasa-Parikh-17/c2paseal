@@ -53,8 +53,8 @@ type ManifestStore struct {
 	Sidecar   string               // the sidecar file the store came from; empty if embedded
 }
 
-// Read reads and decodes the manifest store of a JPEG, PNG or WebP file: the
-// embedded one, or, if there is none, its sidecar (SidecarPath(path)).
+// Read reads and decodes the manifest store of a JPEG, PNG, WebP, HEIC or AVIF file:
+// the embedded one, or, if there is none, its sidecar (SidecarPath(path)).
 func Read(path string) (*ManifestStore, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

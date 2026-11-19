@@ -133,7 +133,7 @@ func run(out, work, require string, strict bool) error {
 	return nil
 }
 
-// fixtureCorpus lists every JPEG and PNG fixture in testdata.
+// fixtureCorpus lists every image fixture in testdata.
 func fixtureCorpus() ([]item, error) {
 	var out []item
 	for _, k := range fixtures.Kinds {

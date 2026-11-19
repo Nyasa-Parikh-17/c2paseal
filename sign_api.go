@@ -25,8 +25,8 @@ var ErrSignFormat = sign.ErrFormat
 // store.
 type SignedAsset = sign.Signed
 
-// Sign reads the JPEG, PNG or WebP file at in, signs it and writes the result to out
-// (atomically, via a temporary file in out's directory).
+// Sign reads the JPEG, PNG, WebP, HEIC or AVIF file at in, signs it and writes the
+// result to out (atomically, via a temporary file in out's directory).
 //
 // If in already has a manifest store, it is kept and recorded as the
 // parent ingredient of the new manifest (SignOptions.NoHistory replaces it
@@ -63,8 +63,8 @@ func SignBytes(b []byte, opts *SignOptions) ([]byte, error) {
 	return s.File, nil
 }
 
-// SignAsset signs a JPEG, PNG or WebP file held in memory and returns the signed file
-// and its manifest store (embedded in the file, or, with
+// SignAsset signs a JPEG, PNG, WebP, HEIC or AVIF file held in memory and returns the
+// signed file and its manifest store (embedded in the file, or, with
 // SignOptions.Sidecar, to be saved as a sidecar or served at
 // SignOptions.RemoteURL).
 func SignAsset(b []byte, opts *SignOptions) (*SignedAsset, error) {
@@ -77,13 +77,25 @@ func SidecarPath(path string) string {
 	return strings.TrimSuffix(path, filepath.Ext(path)) + ".c2pa"
 }
 
+// writeAtomic writes data to path through a temporary file in the same
+// folder, so path holds either its old content or all of data, never part.
+// The data is flushed to disk before the rename. The file keeps the
+// permissions of the file it replaces, or gets 0644 for a new file, not
+// CreateTemp's owner-only 0600.
 func writeAtomic(path string, data []byte) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".c2paseal-*")
 	if err != nil {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
+	defer os.Remove(tmp.Name()) // after a successful rename there is nothing to remove
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Chmod(writeMode(path))
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if err != nil {
 		tmp.Close()
 		return fmt.Errorf("c2paseal: %w", err)
 	}
@@ -94,6 +106,15 @@ func writeAtomic(path string, data []byte) error {
 		return fmt.Errorf("c2paseal: %w", err)
 	}
 	return nil
+}
+
+// writeMode is the permission for a file written to path: that of the file
+// already there, or 0644.
+func writeMode(path string) os.FileMode {
+	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() {
+		return st.Mode().Perm()
+	}
+	return 0o644
 }
 
 // LoadSigner reads a PEM certificate chain (signer first, then

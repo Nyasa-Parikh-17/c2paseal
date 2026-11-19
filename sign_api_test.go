@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Nyasa-Parikh-17/c2paseal/internal/fixtures"
@@ -82,5 +83,41 @@ func TestLoadSignerErrors(t *testing.T) {
 		if _, _, err := LoadSigner(c.cert, c.key); err == nil {
 			t.Errorf("LoadSigner(%s, %s) succeeded", filepath.Base(c.cert), filepath.Base(c.key))
 		}
+	}
+}
+
+// A signed file is written readable by others (0644), not with the
+// temporary file's owner-only mode, and replacing a file keeps its mode.
+// Windows has no Unix permission bits, so only the read-only bit is
+// meaningful there; the test checks Unix systems.
+func TestSignFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no Unix permission bits on Windows")
+	}
+	dir, err := fixtures.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain, key, err := LoadSigner(filepath.Join(dir, "pki", "leaf-chain.pem"), filepath.Join(dir, "pki", "leaf.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := &SignOptions{Chain: chain, Signer: key}
+	in := filepath.Join(dir, "unsigned", "small.jpg")
+	out := filepath.Join(t.TempDir(), "signed.jpg")
+	if err := Sign(in, out, opts); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(out); st.Mode().Perm() != 0o644 {
+		t.Errorf("new signed file mode %v, want 0644", st.Mode().Perm())
+	}
+	if err := os.Chmod(out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sign(in, out, opts); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(out); st.Mode().Perm() != 0o600 {
+		t.Errorf("replaced file mode %v, want its old 0600", st.Mode().Perm())
 	}
 }

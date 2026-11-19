@@ -67,7 +67,8 @@ func (r *Result) State() State {
 	return Invalid
 }
 
-// File verifies the C2PA manifest store of a JPEG or PNG held in memory.
+// File verifies the C2PA manifest store of a JPEG, PNG, WebP, HEIC or AVIF file held in
+// memory.
 // Malformed and unsigned files give failure statuses, never an error.
 func File(b []byte, opts *Options) *Result {
 	fail := func(code, why string) *Result {
@@ -153,7 +154,7 @@ func IsPrerelease(m *manifest.Manifest) bool {
 }
 
 // isJUMBFError reports whether err came from parsing the JUMBF box tree, as
-// opposed to the JPEG or PNG container around it.
+// opposed to the image container around it.
 func isJUMBFError(err error) bool {
 	for _, target := range []error{jumbf.ErrTruncated, jumbf.ErrBadLength, jumbf.ErrNoDescription, jumbf.ErrTooDeep, jumbf.ErrTopLevel} {
 		if errors.Is(err, target) {

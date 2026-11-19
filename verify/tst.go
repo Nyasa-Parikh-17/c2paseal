@@ -46,7 +46,9 @@ type attribute struct {
 	Values asn1.RawValue
 }
 
-// values returns the elements of an attribute's SET OF AttributeValue.
+// values returns the elements of an attribute's SET OF AttributeValue. A
+// malformed SET gives none, so the attribute counts as missing and the token
+// is reported as malformed by the caller's checks.
 func (a attribute) values() []asn1.RawValue {
 	out, _ := elements(a.Values.Bytes)
 	return out

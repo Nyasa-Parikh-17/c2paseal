@@ -1,4 +1,4 @@
-// Command dumpstore prints the C2PA manifest store of a JPEG or PNG as a
+// Command dumpstore prints the C2PA manifest store of an image as a
 // JUMBF box tree, with CBOR content in diagnostic notation. A development aid.
 //
 // Usage: go run ./scripts/dumpstore <file>

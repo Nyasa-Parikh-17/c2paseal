@@ -85,6 +85,10 @@ func Build(opts *Options) (*Manifest, error) {
 // build builds the placeholder manifest. With a parent, the new store holds
 // the parent's manifests unchanged, then the new one, which records the
 // parent as a c2pa.ingredient.v3 assertion referenced by c2pa.opened.
+//
+// The steps draw salts and UUIDs from opts' randomness in a fixed order
+// (manifest ID, instance ID, then each assertion in claim order), so a fixed
+// Options.Rand gives the same bytes every time.
 func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 	if opts == nil {
 		return nil, ErrNoSigner
@@ -103,39 +107,54 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 	}
 	m := &Manifest{Label: "urn:c2pa:" + id, opts: opts, sigLen: cfg.sigLen, digest: make([]byte, digestLen), external: opts.Sidecar, bmff: cfg.bmff}
 
-	// Assertions: the parent ingredient first, since c2pa.opened refers to it.
-	var created []*jumbf.Box
+	created, gathered, err := m.buildAssertions(r, p)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.buildClaim(iid, created, gathered); err != nil {
+		return nil, err
+	}
+	if err := m.buildSignature(); err != nil {
+		return nil, err
+	}
+
+	assertions := superbox(uuidAssertions, manifest.LabelAssertions, append(created, gathered...)...)
+	man := superbox(uuidManifest, m.Label,
+		assertions,
+		superbox(uuidClaim, manifest.LabelClaimV2, m.claim),
+		superbox(uuidSignature, manifest.LabelSignature, m.sig))
+	var manifests []*jumbf.Box
+	if p != nil {
+		manifests = append(manifests, p.manifests...)
+	}
+	m.Store = superbox(uuidStore, manifest.LabelStore, append(manifests, man)...)
+	return m, nil
+}
+
+// buildAssertions builds the assertion boxes in claim order: the created
+// ones (the parent ingredient if any, since c2pa.opened refers to it; the
+// actions; the hard binding, kept in m for backfilling; the soft bindings)
+// and the gathered ones (the thumbnail).
+func (m *Manifest) buildAssertions(r io.Reader, p *parent) (created, gathered []*jumbf.Box, err error) {
+	opts := m.opts
 	acts := opts.actions(p != nil)
 	if p != nil {
-		ingCBOR, err := p.ingredientCBOR()
+		ing, ref, err := parentIngredient(r, p)
 		if err != nil {
-			return nil, fmt.Errorf("sign: encode ingredient: %w", err)
+			return nil, nil, err
 		}
-		ing, err := assertionBox(r, LabelIngredient, uuidCBOR, &jumbf.Box{Type: "cbor", Payload: ingCBOR})
-		if err != nil {
-			return nil, err
-		}
-		ref, err := hashedURI(ing)
-		if err != nil {
-			return nil, err
-		}
-		params := map[string]any{}
-		for k, v := range acts[0].Parameters {
-			params[k] = v
-		}
-		params["ingredients"] = []any{ref}
-		acts = append([]assertion.Action(nil), acts...)
-		acts[0].Parameters = params
+		acts = withIngredient(acts, ref)
 		created = append(created, ing)
 	}
 	actionsCBOR, err := cbormode.Enc.Marshal(&assertion.Actions{Actions: acts})
 	if err != nil {
-		return nil, fmt.Errorf("sign: encode actions: %w", err)
+		return nil, nil, fmt.Errorf("sign: encode actions: %w", err)
 	}
 	actionsSup, err := assertionBox(r, labelActions, uuidCBOR, &jumbf.Box{Type: "cbor", Payload: actionsCBOR})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
 	hd, layout := m.encodeHashData(0, 0, nil)
 	m.layout = layout
 	m.hashData = &jumbf.Box{Type: "cbor", Payload: hd}
@@ -144,10 +163,64 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 		bindingLabel = assertion.LabelBMFFHashV3
 	}
 	if m.hashSup, err = assertionBox(r, bindingLabel, uuidCBOR, m.hashData); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	created = append(created, actionsSup, m.hashSup)
-	for i, sb := range opts.SoftBindings {
+
+	soft, err := softBindingBoxes(r, opts.SoftBindings)
+	if err != nil {
+		return nil, nil, err
+	}
+	created = append(created, soft...)
+
+	if t := opts.Thumbnail; t != nil {
+		thumb, err := assertionBox(r, labelThumbnail, uuidEmbedded,
+			&jumbf.Box{Type: "bfdb", Payload: append(append([]byte{0}, t.Format...), 0)},
+			&jumbf.Box{Type: "bidb", Payload: t.Data})
+		if err != nil {
+			return nil, nil, err
+		}
+		gathered = append(gathered, thumb)
+	}
+	return created, gathered, nil
+}
+
+// parentIngredient builds the c2pa.ingredient.v3 assertion for the parent
+// and the hashed URI that c2pa.opened uses to reference it.
+func parentIngredient(r io.Reader, p *parent) (*jumbf.Box, manifest.HashedURI, error) {
+	ingCBOR, err := p.ingredientCBOR()
+	if err != nil {
+		return nil, manifest.HashedURI{}, fmt.Errorf("sign: encode ingredient: %w", err)
+	}
+	ing, err := assertionBox(r, LabelIngredient, uuidCBOR, &jumbf.Box{Type: "cbor", Payload: ingCBOR})
+	if err != nil {
+		return nil, manifest.HashedURI{}, err
+	}
+	ref, err := hashedURI(ing)
+	if err != nil {
+		return nil, manifest.HashedURI{}, err
+	}
+	return ing, ref, nil
+}
+
+// withIngredient returns a copy of acts whose first action (c2pa.opened)
+// lists ref as its ingredient. acts and its parameters are not modified.
+func withIngredient(acts []assertion.Action, ref manifest.HashedURI) []assertion.Action {
+	params := map[string]any{}
+	for k, v := range acts[0].Parameters {
+		params[k] = v
+	}
+	params["ingredients"] = []any{ref}
+	acts = append([]assertion.Action(nil), acts...)
+	acts[0].Parameters = params
+	return acts
+}
+
+// softBindingBoxes builds one c2pa.soft-binding assertion per soft binding;
+// the second and later get the label instance suffixes __1, __2, ...
+func softBindingBoxes(r io.Reader, sbs []SoftBinding) ([]*jumbf.Box, error) {
+	var out []*jumbf.Box
+	for i, sb := range sbs {
 		sbCBOR, err := cbormode.Enc.Marshal(&assertion.SoftBinding{
 			Alg:    sb.Alg,
 			Blocks: []assertion.SoftBindingBlock{{Value: sb.Value}},
@@ -164,82 +237,71 @@ func build(opts *Options, cfg buildConfig, p *parent) (*Manifest, error) {
 		if err != nil {
 			return nil, err
 		}
-		created = append(created, sup)
+		out = append(out, sup)
 	}
-	var gathered []*jumbf.Box
-	if t := opts.Thumbnail; t != nil {
-		thumb, err := assertionBox(r, labelThumbnail, uuidEmbedded,
-			&jumbf.Box{Type: "bfdb", Payload: append(append([]byte{0}, t.Format...), 0)},
-			&jumbf.Box{Type: "bidb", Payload: t.Data})
-		if err != nil {
-			return nil, err
-		}
-		gathered = append(gathered, thumb)
-	}
+	return out, nil
+}
 
-	// Claim.
-	name, version := opts.generator()
+// buildClaim builds and encodes the v2 claim, referencing the created and
+// gathered assertions by hashed URI.
+func (m *Manifest) buildClaim(iid string, created, gathered []*jumbf.Box) error {
+	name, version := m.opts.generator()
 	m.Claim = &manifest.Claim{
 		InstanceID:         "xmp:iid:" + iid,
 		ClaimGeneratorInfo: manifest.GeneratorInfo{"name": name, "version": version},
 		Signature:          manifest.JUMBFURIPrefix + "/" + manifest.LabelStore + "/" + m.Label + "/" + manifest.LabelSignature,
-		Title:              opts.Title,
+		Title:              m.opts.Title,
 		Alg:                manifest.DefaultAlg,
 	}
 	for _, b := range created {
 		ref, err := hashedURI(b)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		m.Claim.CreatedAssertions = append(m.Claim.CreatedAssertions, ref)
 	}
 	for _, b := range gathered {
 		ref, err := hashedURI(b)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		m.Claim.GatheredAssertions = append(m.Claim.GatheredAssertions, ref)
 	}
 	claimCBOR, err := m.Claim.Encode()
 	if err != nil {
-		return nil, fmt.Errorf("sign: encode claim: %w", err)
+		return fmt.Errorf("sign: encode claim: %w", err)
 	}
 	m.Claim.Raw = claimCBOR
 	m.claim = &jumbf.Box{Type: "cbor", Payload: claimCBOR}
+	return nil
+}
 
-	// Signature placeholder.
-	if m.protected, err = protectedHeader(opts); err != nil {
-		return nil, err
+// buildSignature builds the COSE_Sign1 placeholder at its final size: the
+// protected header, a stapled OCSP response if any, room for the time-stamp
+// token, and a zeroed signature.
+func (m *Manifest) buildSignature() error {
+	var err error
+	if m.protected, err = protectedHeader(m.opts); err != nil {
+		return err
 	}
-	ocspDER, err := opts.staple()
+	ocspDER, err := m.opts.staple()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if ocspDER != nil {
 		m.extra = map[any]any{"rVals": rValsHeader(ocspDER)}
 	}
-	if opts.TSAURL != "" {
-		if m.tstSize, err = tstHeaderSize(opts.timestampReserve(), m.extra); err != nil {
-			return nil, err
+	if m.opts.TSAURL != "" {
+		if m.tstSize, err = tstHeaderSize(m.opts.timestampReserve(), m.extra); err != nil {
+			return err
 		}
 	}
 	sigCBOR, err := m.coseSign1(make([]byte, m.sigLen), nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	m.sig = &jumbf.Box{Type: "cbor", Payload: sigCBOR}
-
-	assertions := superbox(uuidAssertions, manifest.LabelAssertions, append(created, gathered...)...)
-	man := superbox(uuidManifest, m.Label,
-		assertions,
-		superbox(uuidClaim, manifest.LabelClaimV2, m.claim),
-		superbox(uuidSignature, manifest.LabelSignature, m.sig))
-	var manifests []*jumbf.Box
-	if p != nil {
-		manifests = append(manifests, p.manifests...)
-	}
-	m.Store = superbox(uuidStore, manifest.LabelStore, append(manifests, man)...)
-	return m, nil
+	return nil
 }
 
 // Bytes serialises the manifest store.

@@ -33,8 +33,8 @@ var ErrFormat = errors.New("sign: signing supports JPEG, PNG, WebP, HEIC and AVI
 // return only the file, so the store would be lost. Use Asset.
 var ErrSidecar = errors.New("sign: Options.Sidecar needs Asset, which returns the manifest store")
 
-// Asset signs a JPEG, PNG or WebP file and returns the signed file and its manifest
-// store. in is not modified. See embed for the steps.
+// Asset signs a JPEG, PNG, WebP, HEIC or AVIF file and returns the signed file and
+// its manifest store. in is not modified. See embed for the steps.
 //
 // If in already has a manifest store, its manifests are kept, unchanged,
 // in the new store, and the new manifest records the old active manifest

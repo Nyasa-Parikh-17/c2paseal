@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Nyasa-Parikh-17/c2paseal"
+	"github.com/Nyasa-Parikh-17/c2paseal/internal/asset"
 	"github.com/Nyasa-Parikh-17/c2paseal/sign"
 	"github.com/Nyasa-Parikh-17/c2paseal/verify"
 )
@@ -218,7 +219,7 @@ func expand(patterns []string) ([]string, error) {
 				return nil, fmt.Errorf("files: %w", err)
 			}
 			if st.IsDir() {
-				if err := walk(pat, isImage); err != nil {
+				if err := walk(pat, asset.IsImageName); err != nil {
 					return nil, fmt.Errorf("files: %w", err)
 				}
 			} else {
@@ -234,7 +235,7 @@ func expand(patterns []string) ([]string, error) {
 			continue
 		}
 		err := walk(root, func(p string) bool {
-			return isImage(p) && match(pat, strings.TrimPrefix(p, "./"))
+			return asset.IsImageName(p) && match(pat, strings.TrimPrefix(p, "./"))
 		})
 		if err != nil {
 			return nil, fmt.Errorf("files: %w", err)
@@ -289,14 +290,6 @@ func matchParts(pat, name []string) bool {
 		pat, name = pat[1:], name[1:]
 	}
 	return len(name) == 0
-}
-
-func isImage(name string) bool {
-	switch strings.ToLower(path.Ext(name)) {
-	case ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif":
-		return true
-	}
-	return false
 }
 
 func signAll(in *inputs, files []string) ([]record, error) {

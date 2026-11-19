@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("RIFF!\x00\x00\x00WEBP0000\n\x00\x00\x000000000000VP8 \x03\x00\x00\x000000")

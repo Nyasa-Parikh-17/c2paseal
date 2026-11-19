@@ -3,9 +3,9 @@ module github.com/Nyasa-Parikh-17/c2paseal/cmd/sealsvc
 go 1.27
 
 require (
-	github.com/Nyasa-Parikh-17/c2paseal v0.6.0
-	github.com/Nyasa-Parikh-17/c2paseal/keys/awskms v0.6.0
-	github.com/Nyasa-Parikh-17/c2paseal/keys/gcpkms v0.6.0
+	github.com/Nyasa-Parikh-17/c2paseal v0.7.0
+	github.com/Nyasa-Parikh-17/c2paseal/keys/awskms v0.7.0
+	github.com/Nyasa-Parikh-17/c2paseal/keys/gcpkms v0.7.0
 )
 
 require (

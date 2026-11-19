@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	cloud.google.com/go/kms v1.37.0
-	github.com/Nyasa-Parikh-17/c2paseal v0.6.0
+	github.com/Nyasa-Parikh-17/c2paseal v0.7.0
 	github.com/googleapis/gax-go/v2 v2.27.0
 	google.golang.org/api v0.315.0
 	google.golang.org/protobuf v1.36.12

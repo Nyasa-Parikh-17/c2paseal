@@ -2406,3 +2406,12 @@ TestUserTrustList), TestSite in headless Chrome (both engines, offline,
 recovery, trust list), core vet/staticcheck/tests; website: docsite tests
 with every library link checked against this checkout; build.sh produces
 the full site.
+
+### Release v0.7.0 prepared — 2026-11-19 (to push only on the user's approval of gate I)
+- CHANGELOG dated. keys/awskms, keys/gcpkms, cmd/sealsvc, cmd/sealstore,
+  cmd/c2paseal-wasm and examples require the C2paSeal modules at v0.7.0.
+- Clean clone: every module tidy (no changes beyond these), all tests pass.
+- Website repo (c2paseal-website, private, Pages source already GitHub
+  Actions): merged its GitHub initial commit; the website keeps the user's
+  MIT license (the library stays Apache-2.0; the README says so). Its
+  LIBRARY_VERSION is v0.7.0, so it builds once the v0.7.0 tag exists.
